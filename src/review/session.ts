@@ -142,7 +142,6 @@ export function answerCurrentQuestion(state: ReviewSessionState, input: string):
           assignment_id: question.item.assignment.id,
           incorrect_meaning_answers: updatedProgress.incorrectMeaningAnswers,
           incorrect_reading_answers: updatedProgress.incorrectReadingAnswers,
-          created_at: new Date().toISOString(),
         },
       }
     : undefined;

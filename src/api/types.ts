@@ -115,7 +115,7 @@ export interface ReviewCreatePayload {
   assignment_id: number;
   incorrect_meaning_answers: number;
   incorrect_reading_answers: number;
-  created_at: string;
+  created_at?: string;
 }
 
 export interface ReviewCreateResponse {
