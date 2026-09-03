@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/api/types.ts","./src/api/wanikani.ts","./src/review/answers.ts","./src/review/audio.ts","./src/review/kana.ts","./src/review/order.ts","./src/review/session.ts","./src/test/setup.ts"],"errors":true,"version":"5.9.3"}
