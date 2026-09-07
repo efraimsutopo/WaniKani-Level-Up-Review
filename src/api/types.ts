@@ -35,6 +35,41 @@ export interface SummaryReport {
   };
 }
 
+export interface CurrentLevelProgress {
+  level: number;
+  kanjiRequiredForLevelUp: number;
+  kanjiRemainingForLevelUp: number;
+  fastestLevelUpAt: string | null;
+  radicals: CurrentLevelProgressGroup;
+  kanji: CurrentLevelProgressGroup;
+  notGuruItems: CurrentLevelProgressItem[];
+}
+
+export interface CurrentLevelProgressGroup {
+  total: number;
+  passed: number;
+  remaining: number;
+  nextAvailableAt: string | null;
+}
+
+export interface CurrentLevelProgressItem {
+  assignmentId: number | null;
+  subjectId: number;
+  subjectType: "radical" | "kanji";
+  characters: string | null;
+  slug: string;
+  srsStage: number;
+  availableAt: string | null;
+  fastestGuruAt: string | null;
+  blockedByRadicals: Array<{
+    subjectId: number;
+    characters: string | null;
+    slug: string;
+    srsStage: number;
+    fastestGuruAt: string | null;
+  }>;
+}
+
 export interface UserData {
   level: number;
   username: string;

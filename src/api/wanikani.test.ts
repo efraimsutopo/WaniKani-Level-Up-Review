@@ -23,6 +23,7 @@ describe("WaniKaniClient", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
   it("follows collection pagination", async () => {
@@ -140,6 +141,20 @@ describe("WaniKaniClient", () => {
         return collectionResponse([assignment(10, 99)]);
       }
 
+      if (requestUrl.includes("/assignments?") && requestUrl.includes("levels=12")) {
+        return collectionResponse([
+          assignment(20, 120, "radical", 12, { passed: true, passed_at: "2020-01-01T00:00:00.000Z" }),
+          assignment(21, 121, "kanji", 12, { available_at: "2020-01-02T00:00:00.000Z" }),
+        ]);
+      }
+
+      if (requestUrl.includes("/subjects?") && requestUrl.includes("levels=12")) {
+        return collectionResponse([
+          subject(120, "radical", "口"),
+          subject(121, "kanji", "日"),
+        ]);
+      }
+
       if (requestUrl.includes("/subjects?")) {
         return collectionResponse([subject(99)]);
       }
@@ -155,6 +170,8 @@ describe("WaniKaniClient", () => {
     const loaded = await client.loadDueReviewItems();
 
     expect(loaded.items).toHaveLength(1);
+    expect(loaded.currentLevelProgress.kanjiRequiredForLevelUp).toBe(1);
+    expect(loaded.currentLevelProgress.kanji.nextAvailableAt).toBe("2020-01-02T00:00:00.000Z");
     expect(urls.some((url) => url.includes("/summary"))).toBe(false);
     expect(urls.some((url) => url.includes("immediately_available_for_review"))).toBe(true);
     expect(urls.some((url) => url.includes("/assignments") && url.includes("subject_ids="))).toBe(false);
@@ -178,6 +195,14 @@ describe("WaniKaniClient", () => {
         return collectionResponse([assignment(10, 99)]);
       }
 
+      if (requestUrl.includes("/assignments?") && requestUrl.includes("levels=12")) {
+        return collectionResponse([]);
+      }
+
+      if (requestUrl.includes("/subjects?") && requestUrl.includes("levels=12")) {
+        return collectionResponse([]);
+      }
+
       if (requestUrl.includes("/subjects?")) {
         return collectionResponse([subject(99)]);
       }
@@ -199,8 +224,120 @@ describe("WaniKaniClient", () => {
     await client.loadDueReviewItems();
 
     expect(urls.some((url) => url.includes("updated_after="))).toBe(true);
-    expect(urls.some((url) => url.includes("/subjects?"))).toBe(false);
+    expect(urls.some((url) => url.includes("/subjects?ids="))).toBe(false);
     expect(urls.filter((url) => url.includes("subject_ids="))).toHaveLength(0);
+  });
+
+  it("loads current-level radical and kanji progress from assignments", async () => {
+    const fetcher = vi.fn(async (url: string | URL | Request) => {
+      const requestUrl = String(url);
+      if (requestUrl.includes("/assignments?") && requestUrl.includes("levels=8")) {
+        return collectionResponse([
+          assignment(1, 101, "kanji", 8, { passed: true, passed_at: "2020-01-01T00:00:00.000Z" }),
+          assignment(2, 102, "kanji", 8, { passed: true, passed_at: "2020-01-01T00:00:00.000Z" }),
+          assignment(3, 103, "kanji", 8, { available_at: "2020-01-04T00:00:00.000Z" }),
+          assignment(4, 104, "kanji", 8, { available_at: "2020-01-03T00:00:00.000Z" }),
+          assignment(5, 105, "radical", 8, { passed: true, passed_at: "2020-01-01T00:00:00.000Z" }),
+          assignment(6, 106, "radical", 8, { srs_stage: 4, available_at: "2020-01-02T00:00:00.000Z" }),
+        ]);
+      }
+
+      if (requestUrl.includes("/subjects?")) {
+        return collectionResponse([
+          subject(101, "kanji", "一"),
+          subject(102, "kanji", "二"),
+          subject(103, "kanji", "上"),
+          subject(104, "kanji", "下"),
+          {
+            ...subject(107, "kanji", "中"),
+            data: {
+              ...subject(107, "kanji", "中").data,
+              component_subject_ids: [106],
+            },
+          },
+          subject(105, "radical", "丶"),
+          subject(106, "radical", "口"),
+        ]);
+      }
+
+      throw new Error(`Unexpected URL: ${requestUrl}`);
+    });
+
+    const client = new WaniKaniClient("token", fetcher as typeof fetch, 0);
+    const progress = await client.getCurrentLevelProgress(8);
+
+    expect(progress).toMatchObject({
+      level: 8,
+      kanjiRequiredForLevelUp: 5,
+      kanjiRemainingForLevelUp: 3,
+      radicals: {
+        total: 2,
+        passed: 1,
+        remaining: 1,
+        nextAvailableAt: "2020-01-02T00:00:00.000Z",
+      },
+      kanji: {
+        total: 5,
+        passed: 2,
+        remaining: 3,
+        nextAvailableAt: "2020-01-03T00:00:00.000Z",
+      },
+    });
+    expect(progress.notGuruItems.map((item) => item.subjectId)).toEqual([106, 107, 104, 103]);
+    expect(progress.notGuruItems.find((item) => item.subjectId === 107)?.blockedByRadicals[0].subjectId).toBe(106);
+    expect(progress.fastestLevelUpAt).not.toBeNull();
+  });
+
+  it("uses the Apprentice 3 kanji Guru time when 11 Apprentice 4 kanji are not enough to level up", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-07T03:00:00.000Z"));
+
+    const apprenticeFourAvailableAt = "2026-09-08T01:00:00.000Z";
+    const apprenticeThreeAvailableAt = "2026-09-08T01:00:00.000Z";
+    const expectedFastestLevelUpAt = "2026-09-10T00:00:00.000Z";
+    const levelKanji = Array.from({ length: 13 }, (_, index) =>
+      subject(200 + index, "kanji", `kanji-${index + 1}`),
+    );
+    const levelAssignments = [
+      ...levelKanji.slice(0, 11).map((kanji, index) =>
+        assignment(300 + index, kanji.id, "kanji", 12, {
+          srs_stage: 4,
+          available_at: apprenticeFourAvailableAt,
+        }),
+      ),
+      assignment(311, levelKanji[11].id, "kanji", 12, {
+        srs_stage: 3,
+        available_at: apprenticeThreeAvailableAt,
+      }),
+      assignment(312, levelKanji[12].id, "kanji", 12, {
+        srs_stage: 1,
+        available_at: "2026-09-12T01:00:00.000Z",
+      }),
+    ];
+    const fetcher = vi.fn(async (url: string | URL | Request) => {
+      const requestUrl = String(url);
+      if (requestUrl.includes("/assignments?") && requestUrl.includes("levels=12")) {
+        return collectionResponse(levelAssignments);
+      }
+
+      if (requestUrl.includes("/subjects?") && requestUrl.includes("levels=12")) {
+        return collectionResponse(levelKanji);
+      }
+
+      throw new Error(`Unexpected URL: ${requestUrl}`);
+    });
+
+    const client = new WaniKaniClient("token", fetcher as typeof fetch, 0);
+    const progress = await client.getCurrentLevelProgress(12);
+
+    expect(progress.kanjiRequiredForLevelUp).toBe(12);
+    expect(progress.kanjiRemainingForLevelUp).toBe(12);
+    expect(progress.fastestLevelUpAt).toBe(expectedFastestLevelUpAt);
+    expect(progress.notGuruItems.find((item) => item.subjectId === levelKanji[11].id)).toMatchObject({
+      srsStage: 3,
+      availableAt: apprenticeThreeAvailableAt,
+      fastestGuruAt: expectedFastestLevelUpAt,
+    });
   });
 });
 
@@ -222,14 +359,14 @@ function collectionResponse(data: unknown[]) {
   });
 }
 
-function subject(id: number) {
+function subject(id: number, subjectType = "kanji", characters = "日") {
   return {
     id,
-    object: "kanji",
+    object: subjectType,
     url: "",
     data_updated_at: "",
     data: {
-      characters: "日",
+      characters,
       slug: "sun",
       level: 1,
       meanings: [{ meaning: "Sun", primary: true, accepted_answer: true }],
@@ -238,7 +375,13 @@ function subject(id: number) {
   };
 }
 
-function assignment(id: number, subjectId: number) {
+function assignment(
+  id: number,
+  subjectId: number,
+  subjectType = "kanji",
+  level = 1,
+  overrides: Record<string, unknown> = {},
+) {
   return {
     id,
     object: "assignment",
@@ -246,13 +389,14 @@ function assignment(id: number, subjectId: number) {
     data_updated_at: "",
     data: {
       subject_id: subjectId,
-      subject_type: "kanji",
-      level: 1,
+      subject_type: subjectType,
+      level,
       srs_stage: 3,
       passed_at: null,
       available_at: "2020-01-01T00:00:00.000Z",
       passed: false,
       hidden: false,
+      ...overrides,
     },
   };
 }

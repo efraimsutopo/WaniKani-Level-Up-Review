@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, ReactNode, RefObject } from "react";
 import {
   CheckCircle2,
+  BookOpen,
   Eye,
   EyeOff,
   Info,
@@ -9,7 +10,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { getErrorMessage, WaniKaniClient, WaniKaniError } from "./api/wanikani";
-import type { ReviewItem } from "./api/types";
+import type { CurrentLevelProgress, Resource, ReviewItem, SubjectData, SubjectType } from "./api/types";
 import { getAcceptedAnswers } from "./review/answers";
 import { playPronunciation } from "./review/audio";
 import { romajiToHiragana } from "./review/kana";
@@ -31,9 +32,18 @@ interface SyncState {
   message: string;
   username?: string;
   currentLevel?: number;
+  currentLevelProgress?: CurrentLevelProgress;
 }
 
 type DetailSectionName = "meaning" | "reading" | "composition" | "context";
+type AppView = "review" | "learn";
+
+interface LearnState {
+  status: "idle" | "loading" | "ready" | "error";
+  message: string;
+  level: number | null;
+  subjects: Array<Resource<SubjectData, SubjectType>>;
+}
 
 export function App() {
   const [token, setToken] = useState(
@@ -63,10 +73,18 @@ export function App() {
     composition: true,
     context: true,
   });
-  const [showSessionInfo, setShowSessionInfo] = useState(false);
-  const [showDueTable, setShowDueTable] = useState(false);
+  const [showSessionInfo, setShowSessionInfo] = useState(true);
+  const [showDueTable, setShowDueTable] = useState(true);
   const [playAudio, setPlayAudio] = useState(true);
   const [sortMode, setSortMode] = useState<SortMode>("lower-srs-first");
+  const [activeView, setActiveView] = useState<AppView>("review");
+  const [learnLevel, setLearnLevel] = useState(() => syncState.currentLevel ?? 1);
+  const [learnState, setLearnState] = useState<LearnState>({
+    status: "idle",
+    message: "",
+    level: null,
+    subjects: [],
+  });
   const [submittingAssignmentId, setSubmittingAssignmentId] = useState<
     number | null
   >(null);
@@ -86,11 +104,23 @@ export function App() {
   );
 
   useEffect(() => {
+    if (syncState.currentLevel) setLearnLevel(syncState.currentLevel);
+  }, [syncState.currentLevel]);
+
+  useEffect(() => {
+    if (!client || activeView !== "learn") return;
+    if (learnState.status === "ready" && learnState.level === learnLevel) return;
+    if (learnState.status === "loading" && learnState.level === learnLevel) return;
+
+    void loadLevelSubjects(learnLevel);
+  }, [activeView, client, learnLevel, learnState.level, learnState.status]);
+
+  useEffect(() => {
     if (
       !reviewStarted ||
       !client ||
       session.totalCount > 0 ||
-      syncState.status === "loading"
+      syncState.status !== "idle"
     )
       return;
     void syncReviews();
@@ -160,7 +190,9 @@ export function App() {
             : `Loaded ${orderedItems.length} due review${orderedItems.length === 1 ? "" : "s"}.`,
         username: loaded.username,
         currentLevel: loaded.currentLevel,
+        currentLevelProgress: loaded.currentLevelProgress,
       });
+      setLearnLevel(loaded.currentLevel);
       setReviewStarted(true);
       requestAnimationFrame(() => answerInputRef.current?.focus());
     } catch (error) {
@@ -225,6 +257,45 @@ export function App() {
     setSession(createReviewSession([]));
     setFeedback(null);
     setAnswer("");
+  }
+
+  async function loadLevelSubjects(level: number) {
+    if (!client) {
+      setLearnState({
+        status: "error",
+        message: "Add your API token before loading level items.",
+        level,
+        subjects: [],
+      });
+      return;
+    }
+
+    setLearnState((state) => ({
+      ...state,
+      status: "loading",
+      message: `Loading level ${level} radicals and kanji...`,
+      level,
+    }));
+
+    try {
+      const subjects = await client.getLevelSubjects(level);
+      setLearnState({
+        status: "ready",
+        message: subjects.length === 0 ? `No radical or kanji items found for level ${level}.` : "",
+        level,
+        subjects,
+      });
+    } catch (error) {
+      setLearnState({
+        status: "error",
+        message:
+          error instanceof WaniKaniError
+            ? error.message
+            : `Could not load level ${level}: ${getErrorMessage(error)}`,
+        level,
+        subjects: [],
+      });
+    }
   }
 
   function changeSortMode(nextSortMode: SortMode) {
@@ -312,142 +383,179 @@ export function App() {
           )}
         </header>
 
-        <div className="progress-track" aria-hidden="true">
-          <div style={{ width: `${progressPercent}%` }} />
-        </div>
-
-        <div className="review-layout">
-          <aside className="side-panel" aria-label="review progress">
-            <button
-              type="button"
-              className="table-toggle"
-              onClick={() => setShowSessionInfo((shown) => !shown)}
-            >
-              <span>Session info</span>
-              <strong>{showSessionInfo ? "Hide" : "Show"}</strong>
-            </button>
-            {showSessionInfo && (
-              <div className="metrics">
-                <Metric label="User" value={syncState.username ?? "-"} />
-                <Metric
-                  label="Level"
-                  value={syncState.currentLevel?.toString() ?? "-"}
-                />
-                <Metric label="Due" value={dueCount.toString()} />
-                <Metric label="Done" value={`${progressPercent}%`} />
-              </div>
-            )}
-            {dueBreakdown.length > 0 && (
-              <DueBreakdown
-                rows={dueBreakdown}
-                expanded={showDueTable}
-                onToggle={() => setShowDueTable((shown) => !shown)}
-              />
-            )}
-          </aside>
-
-          <div className="review-center">
-            {syncState.status === "loading" ? (
-              <div
-                className="empty-state loading-state"
-                role="status"
-                aria-live="polite"
-              >
-                <RefreshCw size={38} className="spin" />
-                <h2>Syncing reviews</h2>
-                <p>Fetching due assignments and reusing cached item data.</p>
-              </div>
-            ) : currentQuestion ? (
-              <ReviewCard
-                item={currentQuestion.item}
-                kind={currentQuestion.kind}
-                answer={answer}
-                feedback={feedback}
-                submitting={
-                  submittingAssignmentId === currentQuestion.item.assignment.id
-                }
-                answerInputRef={answerInputRef}
-                showDetails={showDetails}
-                openDetailSections={openDetailSections}
-                onToggleDetails={() => setShowDetails((shown) => !shown)}
-                onToggleDetailSection={(section) =>
-                  setOpenDetailSections((sections) => ({
-                    ...sections,
-                    [section]: !sections[section],
-                  }))
-                }
-                onAnswerChange={setAnswer}
-                onSubmit={submitAnswer}
-              />
-            ) : (
-              <div className="empty-state">
-                <CheckCircle2 size={38} />
-                <h2>
-                  {session.totalCount === 0
-                    ? "No active session"
-                    : "Session complete"}
-                </h2>
-                <p>
-                  {session.totalCount === 0
-                    ? "Sync due reviews to start."
-                    : "All local review questions are complete."}
-                </p>
-              </div>
-            )}
-          </div>
-
-          <aside
-            className="side-panel side-actions"
-            aria-label="review actions"
+        <nav className="view-tabs" aria-label="app views">
+          <button
+            type="button"
+            className={activeView === "review" ? "active" : undefined}
+            onClick={() => setActiveView("review")}
           >
-            <button
-              type="button"
-              className="primary-button"
-              onClick={syncReviews}
-              disabled={!token.trim() || syncState.status === "loading"}
-            >
-              <RefreshCw
-                size={18}
-                className={syncState.status === "loading" ? "spin" : undefined}
-              />
-              {syncState.status === "loading" ? "Syncing" : "Sync"}
-            </button>
-            <button type="button" onClick={changeToken}>
-              Change token
-            </button>
-            <label className="toggle-row">
-              <input
-                type="checkbox"
-                checked={playAudio}
-                onChange={(event) => setPlayAudio(event.target.checked)}
-              />
-              Play audio
-            </label>
-            <div className="sort-card" aria-label="sort mode">
-              <span>Sort remaining</span>
-              <div className="segmented-control">
-                <button
-                  type="button"
-                  className={
-                    sortMode === "lower-srs-first" ? "active" : undefined
-                  }
-                  onClick={() => changeSortMode("lower-srs-first")}
-                >
-                  Lower SRS
-                </button>
-                <button
-                  type="button"
-                  className={
-                    sortMode === "lower-level-first" ? "active" : undefined
-                  }
-                  onClick={() => changeSortMode("lower-level-first")}
-                >
-                  Lower level
-                </button>
-              </div>
+            <RotateCcw size={18} />
+            Review
+          </button>
+          <button
+            type="button"
+            className={activeView === "learn" ? "active" : undefined}
+            onClick={() => setActiveView("learn")}
+          >
+            <BookOpen size={18} />
+            Learn
+          </button>
+        </nav>
+
+        {activeView === "review" ? (
+          <>
+            <div className="progress-track" aria-hidden="true">
+              <div style={{ width: `${progressPercent}%` }} />
             </div>
-          </aside>
-        </div>
+
+            <div className="review-layout">
+              <aside className="side-panel" aria-label="review progress">
+                <div className="progress-card">
+                  <button
+                    type="button"
+                    className="table-toggle progress-card-toggle"
+                    onClick={() => setShowSessionInfo((shown) => !shown)}
+                  >
+                    <span>Session info</span>
+                    <strong>{showSessionInfo ? "Hide" : "Show"}</strong>
+                  </button>
+                  {showSessionInfo && (
+                    <div className="metrics">
+                      <Metric label="User" value={syncState.username ?? "-"} />
+                      <Metric
+                        label="Level"
+                        value={syncState.currentLevel?.toString() ?? "-"}
+                      />
+                      <Metric label="Due" value={dueCount.toString()} />
+                      <Metric label="Done" value={`${progressPercent}%`} />
+                      {syncState.currentLevelProgress && (
+                        <CurrentLevelProgressMetrics
+                          progress={syncState.currentLevelProgress}
+                        />
+                      )}
+                    </div>
+                  )}
+                  {dueBreakdown.length > 0 && (
+                    <DueBreakdown
+                      rows={dueBreakdown}
+                      expanded={showDueTable}
+                      onToggle={() => setShowDueTable((shown) => !shown)}
+                    />
+                  )}
+                </div>
+              </aside>
+
+              <div className="review-center">
+                {syncState.status === "loading" ? (
+                  <div
+                    className="empty-state loading-state"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    <RefreshCw size={38} className="spin" />
+                    <h2>Syncing reviews</h2>
+                    <p>Fetching due assignments and reusing cached item data.</p>
+                  </div>
+                ) : currentQuestion ? (
+                  <ReviewCard
+                    item={currentQuestion.item}
+                    kind={currentQuestion.kind}
+                    answer={answer}
+                    feedback={feedback}
+                    submitting={
+                      submittingAssignmentId === currentQuestion.item.assignment.id
+                    }
+                    answerInputRef={answerInputRef}
+                    showDetails={showDetails}
+                    openDetailSections={openDetailSections}
+                    onToggleDetails={() => setShowDetails((shown) => !shown)}
+                    onToggleDetailSection={(section) =>
+                      setOpenDetailSections((sections) => ({
+                        ...sections,
+                        [section]: !sections[section],
+                      }))
+                    }
+                    onAnswerChange={setAnswer}
+                    onSubmit={submitAnswer}
+                  />
+                ) : (
+                  <div className="empty-state">
+                    <CheckCircle2 size={38} />
+                    <h2>
+                      {session.totalCount === 0
+                        ? "No active session"
+                        : "Session complete"}
+                    </h2>
+                    <p>
+                      {session.totalCount === 0
+                        ? "Sync due reviews to start."
+                        : "All local review questions are complete."}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <aside
+                className="side-panel side-actions"
+                aria-label="review actions"
+              >
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={syncReviews}
+                  disabled={!token.trim() || syncState.status === "loading"}
+                >
+                  <RefreshCw
+                    size={18}
+                    className={syncState.status === "loading" ? "spin" : undefined}
+                  />
+                  {syncState.status === "loading" ? "Syncing" : "Sync"}
+                </button>
+                <button type="button" onClick={changeToken}>
+                  Change token
+                </button>
+                <label className="toggle-row">
+                  <input
+                    type="checkbox"
+                    checked={playAudio}
+                    onChange={(event) => setPlayAudio(event.target.checked)}
+                  />
+                  Play audio
+                </label>
+                <div className="sort-card" aria-label="sort mode">
+                  <span>Sort remaining</span>
+                  <div className="segmented-control">
+                    <button
+                      type="button"
+                      className={
+                        sortMode === "lower-srs-first" ? "active" : undefined
+                      }
+                      onClick={() => changeSortMode("lower-srs-first")}
+                    >
+                      Lower SRS
+                    </button>
+                    <button
+                      type="button"
+                      className={
+                        sortMode === "lower-level-first" ? "active" : undefined
+                      }
+                      onClick={() => changeSortMode("lower-level-first")}
+                    >
+                      Lower level
+                    </button>
+                  </div>
+                </div>
+              </aside>
+            </div>
+          </>
+        ) : (
+          <LearnPage
+            level={learnLevel}
+            learnState={learnState}
+            onLevelChange={(level) => setLearnLevel(level)}
+            onReload={() => void loadLevelSubjects(learnLevel)}
+          />
+        )}
       </section>
     </main>
   );
@@ -685,6 +793,141 @@ function ReviewCard({
       <p className="sr-only">
         Accepted answers include {acceptedAnswers.join(", ")}.
       </p>
+    </article>
+  );
+}
+
+function LearnPage({
+  level,
+  learnState,
+  onLevelChange,
+  onReload,
+}: {
+  level: number;
+  learnState: LearnState;
+  onLevelChange: (level: number) => void;
+  onReload: () => void;
+}) {
+  const radicals = learnState.subjects.filter((subject) => subject.object === "radical");
+  const kanji = learnState.subjects.filter((subject) => subject.object === "kanji");
+
+  return (
+    <div className="learn-page">
+      <div className="learn-toolbar">
+        <label htmlFor="learn-level">Level</label>
+        <input
+          id="learn-level"
+          type="number"
+          min={1}
+          max={60}
+          value={level}
+          onChange={(event) => {
+            const nextLevel = Number(event.target.value);
+            if (Number.isInteger(nextLevel) && nextLevel >= 1 && nextLevel <= 60) {
+              onLevelChange(nextLevel);
+            }
+          }}
+        />
+        <button
+          type="button"
+          className="primary-button"
+          onClick={onReload}
+          disabled={learnState.status === "loading"}
+        >
+          <RefreshCw
+            size={18}
+            className={learnState.status === "loading" ? "spin" : undefined}
+          />
+          {learnState.status === "loading" ? "Loading" : "Load"}
+        </button>
+      </div>
+
+      {learnState.message && (
+        <div className="status-strip learn-status" data-status={learnState.status}>
+          <span>{learnState.message}</span>
+        </div>
+      )}
+
+      {learnState.status === "loading" ? (
+        <div className="empty-state loading-state" role="status" aria-live="polite">
+          <RefreshCw size={38} className="spin" />
+          <h2>Loading level {level}</h2>
+          <p>Fetching radicals and kanji.</p>
+        </div>
+      ) : (
+        <div className="learn-content">
+          <LearnGroup title="Radicals" count={radicals.length} subjects={radicals} />
+          <LearnGroup title="Kanji" count={kanji.length} subjects={kanji} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LearnGroup({
+  title,
+  count,
+  subjects,
+}: {
+  title: string;
+  count: number;
+  subjects: Array<Resource<SubjectData, SubjectType>>;
+}) {
+  return (
+    <section className="learn-group">
+      <div className="learn-group-header">
+        <h2>{title}</h2>
+        <strong>{count}</strong>
+      </div>
+      {subjects.length === 0 ? (
+        <div className="empty-state compact-empty">
+          <p>No items loaded.</p>
+        </div>
+      ) : (
+        <div className="learn-grid">
+          {subjects.map((subject) => (
+            <LearnSubjectCard key={subject.id} subject={subject} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function LearnSubjectCard({
+  subject,
+}: {
+  subject: Resource<SubjectData, SubjectType>;
+}) {
+  const meanings = subject.data.meanings
+    .filter((meaning) => meaning.accepted_answer)
+    .map((meaning) => meaning.meaning);
+  const primaryReadings = subject.data.readings
+    ?.filter((reading) => reading.accepted_answer)
+    .map((reading) => reading.reading) ?? [];
+  const mnemonic =
+    subject.object === "kanji"
+      ? subject.data.reading_mnemonic || subject.data.meaning_mnemonic
+      : subject.data.meaning_mnemonic;
+
+  return (
+    <article className={`learn-card ${subject.object}`}>
+      <div className={`learn-characters ${subject.object}`} lang="ja">
+        {subject.data.characters ?? subject.data.slug}
+      </div>
+      <div className="learn-card-body">
+        <div>
+          <span>Meaning</span>
+          <strong>{meanings.join(", ") || subject.data.slug}</strong>
+        </div>
+        {primaryReadings.length > 0 && (
+          <div>
+            <span>Reading</span>
+            <strong lang="ja">{primaryReadings.join(", ")}</strong>
+          </div>
+        )}
+        {mnemonic && <p>{stripMarkup(mnemonic)}</p>}
+      </div>
     </article>
   );
 }
@@ -1014,6 +1257,113 @@ function Metric({ label, value }: { label: string; value: string }) {
       <strong>{value}</strong>
     </div>
   );
+}
+
+function CurrentLevelProgressMetrics({
+  progress,
+}: {
+  progress: CurrentLevelProgress;
+}) {
+  const kanjiPassedTowardLevelUp = Math.min(
+    progress.kanji.passed,
+    progress.kanjiRequiredForLevelUp,
+  );
+
+  return (
+    <>
+      <Metric
+        label="Level-up kanji"
+        value={`${kanjiPassedTowardLevelUp}/${progress.kanjiRequiredForLevelUp}`}
+      />
+      <Metric label="Need kanji" value={progress.kanjiRemainingForLevelUp.toString()} />
+      <Metric
+        label="Fastest next level"
+        value={formatReviewTime(progress.fastestLevelUpAt)}
+      />
+      {progress.radicals.nextAvailableAt && (
+        <Metric
+          label="Next radical"
+          value={formatReviewTime(progress.radicals.nextAvailableAt)}
+        />
+      )}
+      {progress.kanji.nextAvailableAt && (
+        <Metric
+          label="Next kanji"
+          value={formatReviewTime(progress.kanji.nextAvailableAt)}
+        />
+      )}
+      {progress.notGuruItems.length > 0 && (
+        <>
+          <MetricSectionTitle>Current level not Guru</MetricSectionTitle>
+          <NotGuruTable items={progress.notGuruItems} />
+        </>
+      )}
+    </>
+  );
+}
+
+function MetricSectionTitle({ children }: { children: ReactNode }) {
+  return <div className="metric-section-title">{children}</div>;
+}
+
+function NotGuruTable({
+  items,
+}: {
+  items: CurrentLevelProgress["notGuruItems"];
+}) {
+  return (
+    <div className="not-guru-table-wrap">
+      <table className="not-guru-table" aria-label="current level radical and kanji not Guru">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Type</th>
+            <th>SRS</th>
+            <th>Review</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item) => (
+            <tr key={`${item.subjectType}-${item.subjectId}`}>
+              <td>
+                <strong lang="ja">{item.characters ?? item.slug}</strong>
+              </td>
+              <td>
+                <span className={`mini-type ${item.subjectType}`}>
+                  {shortType(item.subjectType)}
+                </span>
+              </td>
+              <td>{getSrsLabel(item.srsStage)}</td>
+              <td>{formatItemNextReview(item)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function formatItemNextReview(item: CurrentLevelProgress["notGuruItems"][number]): string {
+  if (item.availableAt) return formatReviewTime(item.availableAt);
+  if (item.blockedByRadicals.length === 0) return "Lesson";
+
+  return `After ${item.blockedByRadicals
+    .map((radical) => radical.characters ?? radical.slug)
+    .join(", ")} Guru`;
+}
+
+function formatReviewTime(value: string | null): string {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
 }
 
 interface DueBreakdown {

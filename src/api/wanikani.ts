@@ -1,9 +1,12 @@
 import type {
   AssignmentData,
   Collection,
+  CurrentLevelProgress,
+  CurrentLevelProgressItem,
   Resource,
   ReviewCreatePayload,
   ReviewCreateResponse,
+  SummaryReport,
   StudyMaterialData,
   SubjectData,
   SubjectType,
@@ -18,6 +21,13 @@ const MAX_CONCURRENT_REQUESTS = 4;
 const MIN_REQUEST_INTERVAL_MS = 0;
 const SUBJECT_CACHE_KEY = "wanikani-review-subject-cache-v1";
 const STUDY_MATERIAL_CACHE_KEY = "wanikani-review-study-material-cache-v1";
+const PASSING_SRS_STAGE = 5;
+const REVIEW_INTERVALS_BY_STAGE: Record<number, number> = {
+  1: 14_400_000,
+  2: 28_800_000,
+  3: 82_800_000,
+  4: 169_200_000,
+};
 
 type Fetcher = typeof fetch;
 const defaultFetcher: Fetcher = (input, init) => globalThis.fetch(input, init);
@@ -57,12 +67,46 @@ export class WaniKaniClient {
     return this.request<Resource<UserData, "user">>("/user");
   }
 
+  async getSummary(): Promise<SummaryReport> {
+    return this.request<SummaryReport>("/summary");
+  }
+
   async getDueAssignments(): Promise<Array<Resource<AssignmentData, "assignment">>> {
     const assignments = await this.requestCollection<Resource<AssignmentData, "assignment">>(
       "/assignments?immediately_available_for_review",
     );
 
     return assignments.filter((assignment) => !assignment.data.hidden);
+  }
+
+  async getCurrentLevelProgress(level: number): Promise<CurrentLevelProgress> {
+    const params = new URLSearchParams({
+      levels: String(level),
+      subject_types: "radical,kanji",
+    });
+    const subjectParams = new URLSearchParams({
+      levels: String(level),
+      types: "radical,kanji",
+    });
+    const [assignments, levelSubjects] = await Promise.all([
+      this.requestCollection<Resource<AssignmentData, "assignment">>(
+      `/assignments?${params.toString()}`,
+      ),
+      this.requestCollection<Resource<SubjectData, SubjectType>>(`/subjects?${subjectParams.toString()}`),
+    ]);
+    const visibleAssignments = assignments.filter((assignment) => !assignment.data.hidden);
+    const levelSubjectById = new Map(levelSubjects.map((subject) => [subject.id, subject]));
+
+    return buildCurrentLevelProgress(level, visibleAssignments, levelSubjects, levelSubjectById);
+  }
+
+  async getLevelSubjects(level: number): Promise<Array<Resource<SubjectData, SubjectType>>> {
+    const params = new URLSearchParams({
+      levels: String(level),
+      types: "radical,kanji",
+    });
+
+    return this.requestCollection<Resource<SubjectData, SubjectType>>(`/subjects?${params.toString()}`);
   }
 
   async getAssignments(subjectIds: number[]): Promise<Array<Resource<AssignmentData, "assignment">>> {
@@ -98,6 +142,7 @@ export class WaniKaniClient {
 
   async loadDueReviewItems(): Promise<{
     currentLevel: number;
+    currentLevelProgress: CurrentLevelProgress;
     username: string;
     items: Array<{
       assignment: Resource<AssignmentData, "assignment">;
@@ -107,11 +152,16 @@ export class WaniKaniClient {
       studyMaterial?: Resource<StudyMaterialData, "study_material">;
     }>;
   }> {
-    const [user, assignments] = await Promise.all([this.getUser(), this.getDueAssignments()]);
+    const user = await this.getUser();
+    const [assignments, currentLevelProgress] = await Promise.all([
+      this.getDueAssignments(),
+      this.getCurrentLevelProgress(user.data.level),
+    ]);
     const uniqueSubjectIds = [...new Set(assignments.map((assignment) => assignment.data.subject_id))];
     if (uniqueSubjectIds.length === 0) {
       return {
         currentLevel: user.data.level,
+        currentLevelProgress,
         username: user.data.username,
         items: [],
       };
@@ -140,6 +190,7 @@ export class WaniKaniClient {
 
     return {
       currentLevel: user.data.level,
+      currentLevelProgress,
       username: user.data.username,
       items: assignments.flatMap((assignment) => {
         const subject = subjectById.get(assignment.data.subject_id);
@@ -216,7 +267,13 @@ export class WaniKaniClient {
         if (resetAt && attempt < 1) {
           retryAfterMs = Math.max(0, Number(resetAt) * 1000 - Date.now());
         } else {
-          const resetMessage = resetAt ? ` Try again after ${new Date(Number(resetAt) * 1000).toLocaleTimeString()}.` : "";
+          const resetMessage = resetAt
+            ? ` Try again after ${new Date(Number(resetAt) * 1000).toLocaleTimeString(undefined, {
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: false,
+              })}.`
+            : "";
           throw new WaniKaniError(`WaniKani rate limit exceeded.${resetMessage}`, response.status);
         }
       } else if (!response.ok) {
@@ -308,6 +365,209 @@ export class WaniKaniClient {
     writeResourceCache(STUDY_MATERIAL_CACHE_KEY, nextRecords);
     return [...cached, ...fetched];
   }
+}
+
+function buildCurrentLevelProgress(
+  level: number,
+  assignments: Array<Resource<AssignmentData, "assignment">>,
+  subjects: Array<Resource<SubjectData, SubjectType>>,
+  subjectById: Map<number, Resource<SubjectData, SubjectType>>,
+): CurrentLevelProgress {
+  const assignmentBySubjectId = new Map(assignments.map((assignment) => [assignment.data.subject_id, assignment]));
+  const radicals = buildCurrentLevelProgressGroup(subjects, assignmentBySubjectId, "radical");
+  const kanji = buildCurrentLevelProgressGroup(subjects, assignmentBySubjectId, "kanji");
+  const kanjiRequiredForLevelUp = Math.ceil(kanji.total * 0.9);
+  const now = new Date();
+  const radicalPassTimesBySubjectId = buildRadicalPassTimes(subjects, assignmentBySubjectId, now);
+  const notGuruItems = buildNotGuruItems(subjects, assignmentBySubjectId, subjectById, radicalPassTimesBySubjectId, now);
+
+  return {
+    level,
+    kanjiRequiredForLevelUp,
+    kanjiRemainingForLevelUp: Math.max(0, kanjiRequiredForLevelUp - kanji.passed),
+    fastestLevelUpAt: estimateFastestLevelUpAt(subjects, assignmentBySubjectId, notGuruItems, kanjiRequiredForLevelUp, now),
+    radicals,
+    kanji,
+    notGuruItems,
+  };
+}
+
+function buildCurrentLevelProgressGroup(
+  subjects: Array<Resource<SubjectData, SubjectType>>,
+  assignmentBySubjectId: Map<number, Resource<AssignmentData, "assignment">>,
+  subjectType: "radical" | "kanji",
+) {
+  const matchingSubjects = subjects.filter((subject) => subject.object === subjectType);
+  const remainingAssignments = matchingSubjects
+    .map((subject) => assignmentBySubjectId.get(subject.id))
+    .filter((assignment): assignment is Resource<AssignmentData, "assignment"> => Boolean(assignment && !isPassed(assignment)));
+
+  return {
+    total: matchingSubjects.length,
+    passed: matchingSubjects.filter((subject) => {
+      const assignment = assignmentBySubjectId.get(subject.id);
+      return assignment ? isPassed(assignment) : false;
+    }).length,
+    remaining: matchingSubjects.filter((subject) => !isPassed(assignmentBySubjectId.get(subject.id))).length,
+    nextAvailableAt: getEarliestAvailableAt(remainingAssignments),
+  };
+}
+
+function isPassed(assignment: Resource<AssignmentData, "assignment"> | undefined): boolean {
+  return Boolean(assignment?.data.passed || assignment?.data.passed_at);
+}
+
+function buildNotGuruItems(
+  subjects: Array<Resource<SubjectData, SubjectType>>,
+  assignmentBySubjectId: Map<number, Resource<AssignmentData, "assignment">>,
+  subjectById: Map<number, Resource<SubjectData, SubjectType>>,
+  radicalPassTimesBySubjectId: Map<number, number>,
+  now: Date,
+): CurrentLevelProgressItem[] {
+  return subjects
+    .flatMap((subject) => {
+      if (subject.object !== "radical" && subject.object !== "kanji") return [];
+      const assignment = assignmentBySubjectId.get(subject.id);
+      if (isPassed(assignment)) return [];
+      const currentSubject = subjectById.get(subject.id);
+      if (!currentSubject) return [];
+
+      const blockedByRadicals =
+        subject.object === "kanji" && !assignment
+          ? (subject.data.component_subject_ids ?? [])
+              .flatMap((componentId) => {
+                const radical = subjectById.get(componentId);
+                if (!radical || radical.object !== "radical") return [];
+                const radicalAssignment = assignmentBySubjectId.get(componentId);
+                if (isPassed(radicalAssignment)) return [];
+                const fastestGuruAt = radicalPassTimesBySubjectId.get(componentId);
+                return [
+                  {
+                    subjectId: radical.id,
+                    characters: radical.data.characters,
+                    slug: radical.data.slug,
+                    srsStage: radicalAssignment?.data.srs_stage ?? 0,
+                    fastestGuruAt: fastestGuruAt ? new Date(fastestGuruAt).toISOString() : null,
+                  },
+                ];
+              })
+              .sort((left, right) => left.srsStage - right.srsStage || compareNullableDates(left.fastestGuruAt, right.fastestGuruAt))
+          : [];
+
+      const unlockAt = blockedByRadicals.length
+        ? Math.max(
+            now.getTime(),
+            ...blockedByRadicals.map((radical) =>
+              radical.fastestGuruAt ? Date.parse(radical.fastestGuruAt) : now.getTime(),
+            ),
+          )
+        : now.getTime();
+
+      return [
+        {
+          assignmentId: assignment?.id ?? null,
+          subjectId: subject.id,
+          subjectType: subject.object,
+          characters: currentSubject.data.characters,
+          slug: currentSubject.data.slug,
+          srsStage: assignment?.data.srs_stage ?? 0,
+          availableAt: assignment?.data.available_at ?? null,
+          fastestGuruAt: new Date(estimateAssignmentPassTime(assignment, unlockAt)).toISOString(),
+          blockedByRadicals,
+        },
+      ];
+    })
+    .sort(compareCurrentLevelProgressItems);
+}
+
+function estimateFastestLevelUpAt(
+  subjects: Array<Resource<SubjectData, SubjectType>>,
+  assignmentBySubjectId: Map<number, Resource<AssignmentData, "assignment">>,
+  notGuruItems: CurrentLevelProgressItem[],
+  kanjiRequiredForLevelUp: number,
+  now: Date,
+): string | null {
+  const passedKanjiCount = subjects.filter((subject) => {
+    const assignment = assignmentBySubjectId.get(subject.id);
+    return subject.object === "kanji" && isPassed(assignment);
+  }).length;
+  const neededKanjiCount = Math.max(0, kanjiRequiredForLevelUp - passedKanjiCount);
+  if (neededKanjiCount === 0) return now.toISOString();
+
+  const kanjiPassTimes = notGuruItems
+    .filter((item) => item.subjectType === "kanji" && item.fastestGuruAt)
+    .map((item) => Date.parse(item.fastestGuruAt as string))
+    .sort((left, right) => left - right);
+
+  return kanjiPassTimes.length >= neededKanjiCount ? new Date(kanjiPassTimes[neededKanjiCount - 1]).toISOString() : null;
+}
+
+function buildRadicalPassTimes(
+  subjects: Array<Resource<SubjectData, SubjectType>>,
+  assignmentBySubjectId: Map<number, Resource<AssignmentData, "assignment">>,
+  now: Date,
+): Map<number, number> {
+  const radicalPassTimesBySubjectId = new Map<number, number>();
+  for (const subject of subjects) {
+    if (subject.object !== "radical") continue;
+    radicalPassTimesBySubjectId.set(
+      subject.id,
+      estimateAssignmentPassTime(assignmentBySubjectId.get(subject.id), now.getTime()),
+    );
+  }
+  return radicalPassTimesBySubjectId;
+}
+
+function estimateAssignmentPassTime(
+  assignment: Resource<AssignmentData, "assignment"> | undefined,
+  startAt: number,
+): number {
+  const srsStage = assignment?.data.srs_stage ?? 0;
+
+  if (srsStage >= PASSING_SRS_STAGE) return startAt;
+  if (srsStage === 0) {
+    let reviewAt = startAt;
+    for (let stage = 1; stage < PASSING_SRS_STAGE; stage += 1) {
+      reviewAt += REVIEW_INTERVALS_BY_STAGE[stage] ?? 0;
+    }
+    return reviewAt;
+  }
+
+  let reviewAt = assignment?.data.available_at ? Math.max(Date.parse(assignment.data.available_at), startAt) : startAt;
+  if (srsStage === PASSING_SRS_STAGE - 1) return reviewAt;
+
+  for (let stage = srsStage + 1; stage < PASSING_SRS_STAGE; stage += 1) {
+    reviewAt += REVIEW_INTERVALS_BY_STAGE[stage] ?? 0;
+  }
+
+  return reviewAt;
+}
+
+function compareCurrentLevelProgressItems(left: CurrentLevelProgressItem, right: CurrentLevelProgressItem): number {
+  return (
+    progressSubjectTypeSort(left.subjectType) - progressSubjectTypeSort(right.subjectType) ||
+    left.srsStage - right.srsStage ||
+    compareNullableDates(left.availableAt, right.availableAt) ||
+    left.subjectId - right.subjectId
+  );
+}
+
+function progressSubjectTypeSort(subjectType: CurrentLevelProgressItem["subjectType"]): number {
+  return subjectType === "radical" ? 0 : 1;
+}
+
+function getEarliestAvailableAt(assignments: Array<Resource<AssignmentData, "assignment">>): string | null {
+  return assignments
+    .map((assignment) => assignment.data.available_at)
+    .filter((availableAt): availableAt is string => Boolean(availableAt))
+    .sort((left, right) => compareNullableDates(left, right))[0] ?? null;
+}
+
+function compareNullableDates(left: string | null, right: string | null): number {
+  if (left === right) return 0;
+  if (left === null) return 1;
+  if (right === null) return -1;
+  return Date.parse(left) - Date.parse(right);
 }
 
 interface ResourceCache<T> {

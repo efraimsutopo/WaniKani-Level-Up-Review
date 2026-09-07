@@ -179,6 +179,149 @@ h1 {
   align-items: start;
 }
 
+.view-tabs {
+  display: inline-grid;
+  grid-template-columns: 1fr 1fr;
+  width: min(360px, 100%);
+  border: 1px solid #b8c0b2;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.view-tabs button {
+  min-height: 40px;
+  border: 0;
+  border-radius: 0;
+  background: #ffffff;
+}
+
+.view-tabs button + button {
+  border-left: 1px solid #b8c0b2;
+}
+
+.view-tabs button.active {
+  background: #19676c;
+  color: #ffffff;
+}
+
+.learn-page {
+  display: grid;
+  gap: 16px;
+}
+
+.learn-toolbar {
+  display: grid;
+  grid-template-columns: auto minmax(92px, 120px) auto;
+  gap: 10px;
+  align-items: center;
+  justify-content: start;
+}
+
+.learn-toolbar label {
+  color: #56615a;
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.learn-status {
+  max-width: none;
+}
+
+.learn-content {
+  display: grid;
+  gap: 18px;
+}
+
+.learn-group {
+  display: grid;
+  gap: 10px;
+}
+
+.learn-group-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.learn-group-header h2 {
+  font-size: 1.15rem;
+}
+
+.learn-group-header strong {
+  color: #5f6a62;
+}
+
+.learn-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.learn-card {
+  min-width: 0;
+  border: 1px solid #d0d7ce;
+  border-radius: 8px;
+  background: #ffffff;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+}
+
+.learn-characters {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 12px 8px;
+  color: #ffffff;
+  font-size: 2.6rem;
+  line-height: 1;
+  overflow-wrap: anywhere;
+}
+
+.learn-characters.radical {
+  background: #00a1f1;
+}
+
+.learn-characters.kanji {
+  background: #f100a1;
+}
+
+.learn-card-body {
+  min-width: 0;
+  padding: 10px 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.learn-card-body div {
+  display: grid;
+  gap: 2px;
+}
+
+.learn-card-body span {
+  color: #657068;
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.learn-card-body strong,
+.learn-card-body p {
+  overflow-wrap: anywhere;
+}
+
+.learn-card-body p {
+  color: #4d5a53;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.compact-empty {
+  padding: 16px;
+}
+
 .review-center {
   min-width: 0;
 }
@@ -189,20 +332,32 @@ h1 {
   min-width: 0;
 }
 
-.metrics {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 10px;
-}
-
-.metric {
-  min-height: 76px;
+.progress-card {
   border: 1px solid #d0d7ce;
   border-radius: 8px;
   background: #ffffff;
-  padding: 12px;
+  overflow: hidden;
+}
+
+.progress-card-toggle {
+  border: 0;
+  border-radius: 0;
+  background: #f1f4ef;
+}
+
+.metrics {
   display: grid;
-  align-content: space-between;
+  grid-template-columns: 1fr;
+}
+
+.metric {
+  min-height: 50px;
+  border-top: 1px solid #e4e9e1;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .metric span {
@@ -211,13 +366,60 @@ h1 {
 }
 
 .metric strong {
+  text-align: right;
   overflow-wrap: anywhere;
-  font-size: 1.28rem;
+  font-size: 1rem;
+}
+
+.metric-section-title {
+  border-top: 1px solid #d0d7ce;
+  background: #f8faf6;
+  padding: 9px 12px;
+  color: #657068;
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.not-guru-table-wrap {
+  max-height: 280px;
+  overflow: auto;
+  border-top: 1px solid #e4e9e1;
+}
+
+.not-guru-table {
+  width: 100%;
+  border-spacing: 0;
+  color: #4d5a53;
+  font-size: 0.76rem;
+}
+
+.not-guru-table th,
+.not-guru-table td {
+  padding: 8px 7px;
+  border-bottom: 1px solid #e4e9e1;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.not-guru-table th {
+  position: sticky;
+  top: 0;
+  background: #ffffff;
+  color: #657068;
+  font-size: 0.66rem;
+  text-transform: uppercase;
+}
+
+.not-guru-table td:first-child strong {
+  color: #182026;
+  font-size: 1.1rem;
+  line-height: 1;
 }
 
 .due-table-wrap {
   display: grid;
-  gap: 8px;
+  border-top: 1px solid #d0d7ce;
 }
 
 .table-toggle {
@@ -227,9 +429,7 @@ h1 {
 
 .due-table {
   width: 100%;
-  border: 1px solid #d0d7ce;
-  border-radius: 8px;
-  background: #ffffff;
+  background: transparent;
   border-spacing: 0;
   overflow: hidden;
   color: #4d5a53;
@@ -777,10 +977,19 @@ h1 {
 
   .topbar,
   .review-layout,
+  .learn-toolbar,
   .answer-form,
   .item-details,
   .reading-pair {
     grid-template-columns: 1fr;
+  }
+
+  .learn-toolbar {
+    justify-content: stretch;
+  }
+
+  .learn-card {
+    grid-template-columns: 72px minmax(0, 1fr);
   }
 
   .status-strip {
