@@ -1,6 +1,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { App } from "./App";
+import { App, getDueBreakdown } from "./App";
+import type { ReviewItem, SubjectType } from "./api/types";
+import type { ReviewSessionState } from "./review/session";
 
 describe("App", () => {
   beforeEach(() => {
@@ -189,6 +191,48 @@ describe("App", () => {
     expect(screen.getByText("口")).toBeInTheDocument();
     expect(screen.getByText("日")).toBeInTheDocument();
   });
+
+  it("puts current-level radical and kanji rows first in the due breakdown using the selected sort", () => {
+    const items = [
+      reviewItem(1, "vocabulary", 31, 1),
+      reviewItem(2, "kanji", 31, 0),
+      reviewItem(3, "radical", 10, 1),
+      reviewItem(4, "radical", 31, 3),
+      reviewItem(5, "kanji", 30, 0),
+      reviewItem(6, "radical", 31, 1),
+    ];
+    const session = reviewSession(items);
+
+    expect(
+      getDueBreakdown(session, "lower-srs-first", 31).map((row) => [
+        row.level,
+        row.type,
+        row.srs,
+      ]),
+    ).toEqual([
+      [31, "kanji", "Locked"],
+      [31, "radical", "Apprentice 1"],
+      [31, "radical", "Apprentice 3"],
+      [30, "kanji", "Locked"],
+      [10, "radical", "Apprentice 1"],
+      [31, "vocabulary", "Apprentice 1"],
+    ]);
+
+    expect(
+      getDueBreakdown(session, "lower-level-first", 31).map((row) => [
+        row.level,
+        row.type,
+        row.srs,
+      ]),
+    ).toEqual([
+      [31, "radical", "Apprentice 1"],
+      [31, "radical", "Apprentice 3"],
+      [31, "kanji", "Locked"],
+      [10, "radical", "Apprentice 1"],
+      [30, "kanji", "Locked"],
+      [31, "vocabulary", "Apprentice 1"],
+    ]);
+  });
 });
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -241,6 +285,69 @@ function assignment(id: number, subjectId: number, overrides: Record<string, unk
       passed: false,
       hidden: false,
       ...overrides,
+    },
+  };
+}
+
+function reviewSession(items: ReviewItem[]): ReviewSessionState {
+  return {
+    items,
+    queue: [],
+    progressByAssignmentId: Object.fromEntries(
+      items.map((item) => [
+        item.assignment.id,
+        {
+          assignmentId: item.assignment.id,
+          requiredKinds: ["meaning"],
+          completedKinds: [],
+          incorrectMeaningAnswers: 0,
+          incorrectReadingAnswers: 0,
+        },
+      ]),
+    ),
+    completedCount: 0,
+    totalCount: items.length,
+  };
+}
+
+function reviewItem(
+  id: number,
+  type: SubjectType,
+  level: number,
+  srsStage: number,
+): ReviewItem {
+  return {
+    assignment: {
+      id: id + 100,
+      object: "assignment",
+      url: "",
+      data_updated_at: "",
+      data: {
+        subject_id: id,
+        subject_type: type,
+        level,
+        srs_stage: srsStage,
+        passed_at: null,
+        available_at: "2026-09-13T00:00:00.000Z",
+        passed: false,
+        hidden: false,
+      },
+    },
+    subject: {
+      id,
+      object: type,
+      url: "",
+      data_updated_at: "",
+      data: {
+        characters: "日",
+        slug: `subject-${id}`,
+        level,
+        meanings: [{ meaning: "Sun", primary: true, accepted_answer: true }],
+        readings:
+          type === "radical"
+            ? undefined
+            : [{ reading: "にち", primary: true, accepted_answer: true }],
+      },
     },
   };
 }

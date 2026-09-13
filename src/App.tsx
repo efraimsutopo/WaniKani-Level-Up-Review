@@ -96,7 +96,7 @@ export function App() {
     session.totalCount === 0
       ? 0
       : Math.round((session.completedCount / session.totalCount) * 100);
-  const dueBreakdown = getDueBreakdown(session, sortMode);
+  const dueBreakdown = getDueBreakdown(session, sortMode, syncState.currentLevel);
 
   const client = useMemo(
     () => (token.trim() ? new WaniKaniClient(token.trim()) : null),
@@ -1366,7 +1366,7 @@ function formatReviewTime(value: string | null): string {
   }).format(date);
 }
 
-interface DueBreakdown {
+export interface DueBreakdown {
   level: number;
   type: "radical" | "kanji" | "vocabulary";
   srs: string;
@@ -1374,9 +1374,10 @@ interface DueBreakdown {
   count: number;
 }
 
-function getDueBreakdown(
+export function getDueBreakdown(
   session: ReviewSessionState,
   sortMode: SortMode,
+  currentLevel?: number,
 ): DueBreakdown[] {
   const rows = new Map<string, DueBreakdown>();
 
@@ -1407,20 +1408,41 @@ function getDueBreakdown(
   }
 
   return [...rows.values()].sort((left, right) => {
-    if (sortMode === "lower-level-first") {
-      return (
-        left.level - right.level ||
-        typeSort(left.type) - typeSort(right.type) ||
-        left.srsRank - right.srsRank
-      );
-    }
+    const criticalPathDifference =
+      dueBreakdownCriticalPathPriority(left, currentLevel) -
+      dueBreakdownCriticalPathPriority(right, currentLevel);
+    if (criticalPathDifference !== 0) return criticalPathDifference;
 
-    return (
-      left.srsRank - right.srsRank ||
-      typeSort(left.type) - typeSort(right.type) ||
-      left.level - right.level
-    );
+    return compareDueBreakdownRows(left, right, sortMode);
   });
+}
+
+function compareDueBreakdownRows(
+  left: DueBreakdown,
+  right: DueBreakdown,
+  sortMode: SortMode,
+): number {
+  if (sortMode === "lower-level-first") {
+    return (
+      left.level - right.level ||
+      typeSort(left.type) - typeSort(right.type) ||
+      left.srsRank - right.srsRank
+    );
+  }
+
+  return (
+    left.srsRank - right.srsRank ||
+    typeSort(left.type) - typeSort(right.type) ||
+    left.level - right.level
+  );
+}
+
+function dueBreakdownCriticalPathPriority(
+  row: DueBreakdown,
+  currentLevel?: number,
+): number {
+  if (currentLevel === undefined || row.level !== currentLevel) return 1;
+  return row.type === "radical" || row.type === "kanji" ? 0 : 1;
 }
 
 function shortType(type: ReviewItem["subject"]["object"]): string {
