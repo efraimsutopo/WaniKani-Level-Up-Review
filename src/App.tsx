@@ -604,6 +604,12 @@ function ReviewCard({
   const srsLabel = getSrsLabel(item.assignment.data.srs_stage);
   const srsGroup = getSrsGroup(item.assignment.data.srs_stage);
   const inputHint = kind === "meaning" ? "romaji" : "auto hiragana";
+  const [readingMeaningOpen, setReadingMeaningOpen] = useState(false);
+  const meaningOpen = kind === "meaning" ? openDetailSections.meaning : readingMeaningOpen;
+
+  useEffect(() => {
+    if (kind === "reading") setReadingMeaningOpen(false);
+  }, [item.assignment.id, kind]);
 
   return (
     <article
@@ -686,8 +692,14 @@ function ReviewCard({
           <DetailSection
             title="Meaning"
             active={kind === "meaning"}
-            open={openDetailSections.meaning}
-            onToggle={() => onToggleDetailSection("meaning")}
+            open={meaningOpen}
+            onToggle={() => {
+              if (kind === "meaning") {
+                onToggleDetailSection("meaning");
+              } else {
+                setReadingMeaningOpen((open) => !open);
+              }
+            }}
           >
             <WordList
               label="Primary"
