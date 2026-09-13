@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "predeploy": "npm run build",
+    "version:patch": "npm version patch --no-git-tag-version",
+    "predeploy": "npm run version:patch && npm run build",
     "deploy": "gh-pages -d dist"
   },
   "dependencies": {

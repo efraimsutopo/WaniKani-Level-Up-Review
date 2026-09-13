@@ -15,6 +15,7 @@ import { getAcceptedAnswers } from "./review/answers";
 import { playPronunciation } from "./review/audio";
 import { romajiToHiragana } from "./review/kana";
 import { getItemLevel, orderReviewItems, type SortMode } from "./review/order";
+import packageInfo from "../package.json";
 import {
   answerCurrentQuestion,
   createReviewSession,
@@ -26,6 +27,7 @@ import {
 } from "./review/session";
 
 const TOKEN_STORAGE_KEY = "wanikani-review-token";
+const APP_VERSION = packageInfo.version;
 
 interface SyncState {
   status: "idle" | "loading" | "ready" | "error";
@@ -312,7 +314,10 @@ export function App() {
         <section className="login-panel" aria-label="WaniKani API token setup">
           <div>
             <p className="eyebrow">Level-up review</p>
-            <h1>WaniKani Queue</h1>
+            <div className="title-row">
+              <h1>WaniKani Queue</h1>
+              <span className="version-badge">v{APP_VERSION}</span>
+            </div>
           </div>
 
           <form
@@ -374,7 +379,10 @@ export function App() {
         <header className="topbar">
           <div>
             <p className="eyebrow">Level-up review</p>
-            <h1>WaniKani Queue</h1>
+            <div className="title-row">
+              <h1>WaniKani Queue</h1>
+              <span className="version-badge">v{APP_VERSION}</span>
+            </div>
           </div>
           {syncState.message && (
             <div className="status-strip" data-status={syncState.status}>
