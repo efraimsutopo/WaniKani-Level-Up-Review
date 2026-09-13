@@ -9,7 +9,7 @@ A local React app for doing WaniKani reviews in an order that favors faster leve
    - Lower level first
 4. Inside every group: radicals, then kanji, then vocabulary
 
-Reviews are only submitted to WaniKani after every required part for an item has been answered correctly. Incorrect answers show accepted answers, increment the matching incorrect counter, and put that question back into the queue.
+Reviews are only submitted to WaniKani after every required part for an item has been answered correctly. Incorrect answers show accepted answers and put that question back into the queue, but only the final corrected review is sent.
 
 ## Setup
 

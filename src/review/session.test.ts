@@ -21,7 +21,7 @@ describe("review session", () => {
     expect(getSrsGroup(9)).toBe("burned");
   });
 
-  it("retries incorrect answers immediately and submits only after all required parts are correct", () => {
+  it("retries incorrect answers immediately and submits only corrected reviews", () => {
     let session = createReviewSession([item()]);
 
     let result;
@@ -37,7 +37,7 @@ describe("review session", () => {
     expect(result.correct).toBe(true);
     expect(result.submitReadyReview?.payload).toMatchObject({
       assignment_id: 10,
-      incorrect_meaning_answers: 1,
+      incorrect_meaning_answers: 0,
       incorrect_reading_answers: 0,
     });
     expect(session.completedCount).toBe(1);

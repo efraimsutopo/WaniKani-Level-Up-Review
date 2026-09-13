@@ -140,8 +140,8 @@ export function answerCurrentQuestion(state: ReviewSessionState, input: string):
         item: question.item,
         payload: {
           assignment_id: question.item.assignment.id,
-          incorrect_meaning_answers: updatedProgress.incorrectMeaningAnswers,
-          incorrect_reading_answers: updatedProgress.incorrectReadingAnswers,
+          incorrect_meaning_answers: 0,
+          incorrect_reading_answers: 0,
         },
       }
     : undefined;
