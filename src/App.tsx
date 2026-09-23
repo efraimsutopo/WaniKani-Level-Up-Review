@@ -10,7 +10,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { getErrorMessage, WaniKaniClient, WaniKaniError } from "./api/wanikani";
-import type { CurrentLevelProgress, Resource, ReviewItem, SubjectData, SubjectType } from "./api/types";
+import type { CurrentLevelProgress, Resource, ReviewItem, SubjectCharacterImage, SubjectData, SubjectType } from "./api/types";
 import { getAcceptedAnswers } from "./review/answers";
 import { playPronunciation } from "./review/audio";
 import { romajiToHiragana } from "./review/kana";
@@ -39,6 +39,30 @@ interface SyncState {
 
 type DetailSectionName = "meaning" | "reading" | "composition" | "context";
 type AppView = "review" | "learn";
+
+function SubjectCharacter({
+  subjectType,
+  characters,
+  slug,
+  character_images,
+}: {
+  subjectType: SubjectType;
+  characters: string | null;
+  slug: string;
+  character_images?: SubjectCharacterImage[];
+}) {
+  const image =
+    subjectType === "radical" && !characters
+      ? character_images?.find((entry) => entry.content_type === "image/svg+xml") ??
+        character_images?.[0]
+      : null;
+
+  return image ? (
+    <img className="subject-character-image" src={image.url} alt={slug} />
+  ) : (
+    <span lang={characters ? "ja" : undefined}>{characters ?? slug}</span>
+  );
+}
 
 interface LearnState {
   status: "idle" | "loading" | "ready" | "error";
@@ -607,7 +631,6 @@ function ReviewCard({
   const readingAnswers = getAcceptedAnswers(item, "reading");
   const readingGroups = getReadingGroups(item);
   const pairedReadings = getPairedReadings(readingGroups);
-  const characters = item.subject.data.characters ?? item.subject.data.slug;
   const level = getItemLevel(item);
   const srsLabel = getSrsLabel(item.assignment.data.srs_stage);
   const srsGroup = getSrsGroup(item.assignment.data.srs_stage);
@@ -637,8 +660,8 @@ function ReviewCard({
           </span>
         </div>
 
-        <div className={`characters ${item.subject.object}`} lang="ja">
-          {characters}
+        <div className={`characters ${item.subject.object}`}>
+          <SubjectCharacter subjectType={item.subject.object} {...item.subject.data} />
         </div>
 
         <form onSubmit={onSubmit} className="answer-form" autoComplete="off">
@@ -932,8 +955,8 @@ function LearnSubjectCard({
 
   return (
     <article className={`learn-card ${subject.object}`}>
-      <div className={`learn-characters ${subject.object}`} lang="ja">
-        {subject.data.characters ?? subject.data.slug}
+      <div className={`learn-characters ${subject.object}`}>
+        <SubjectCharacter subjectType={subject.object} {...subject.data} />
       </div>
       <div className="learn-card-body">
         <div>
@@ -1116,8 +1139,8 @@ function ComponentCards({
                   key={component.id}
                   className={`component-card ${component.object}`}
                 >
-                  <strong lang="ja">
-                    {component.data.characters ?? component.data.slug}
+                  <strong>
+                    <SubjectCharacter subjectType={component.object} {...component.data} />
                   </strong>
                   <small>{name}</small>
                   {readings.length > 0 && (
@@ -1346,7 +1369,14 @@ function NotGuruTable({
           {items.map((item) => (
             <tr key={`${item.subjectType}-${item.subjectId}`}>
               <td>
-                <strong lang="ja">{item.characters ?? item.slug}</strong>
+                <strong>
+                  <SubjectCharacter
+                    subjectType={item.subjectType}
+                    characters={item.characters}
+                    slug={item.slug}
+                    character_images={item.characterImages}
+                  />
+                </strong>
               </td>
               <td>
                 <span className={`mini-type ${item.subjectType}`}>

@@ -57,6 +57,7 @@ export interface CurrentLevelProgressItem {
   subjectId: number;
   subjectType: "radical" | "kanji";
   characters: string | null;
+  characterImages?: SubjectCharacterImage[];
   slug: string;
   srsStage: number;
   availableAt: string | null;
@@ -64,6 +65,7 @@ export interface CurrentLevelProgressItem {
   blockedByRadicals: Array<{
     subjectId: number;
     characters: string | null;
+    characterImages?: SubjectCharacterImage[];
     slug: string;
     srsStage: number;
     fastestGuruAt: string | null;
@@ -103,8 +105,15 @@ export interface SubjectReading {
   type?: string;
 }
 
+export interface SubjectCharacterImage {
+  url: string;
+  content_type: string;
+  metadata?: { inline_styles?: boolean };
+}
+
 export interface SubjectData {
   characters: string | null;
+  character_images?: SubjectCharacterImage[];
   slug: string;
   level: number;
   meanings: SubjectMeaning[];

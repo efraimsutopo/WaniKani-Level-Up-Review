@@ -169,6 +169,13 @@ describe("App", () => {
             object: "radical",
             data: {
               ...subject(120, "口").data,
+              characters: null,
+              slug: "elf",
+              character_images: [{
+                url: "https://example.com/elf.svg",
+                content_type: "image/svg+xml",
+                metadata: { inline_styles: true },
+              }],
               readings: undefined,
             },
           },
@@ -188,7 +195,11 @@ describe("App", () => {
     expect(screen.getByLabelText("Level")).toHaveValue(12);
     expect(await screen.findByText("Radicals")).toBeInTheDocument();
     expect(screen.getByText("Kanji")).toBeInTheDocument();
-    expect(screen.getByText("口")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "elf" })).toHaveAttribute(
+      "src",
+      "https://example.com/elf.svg",
+    );
+    expect(screen.queryByText("elf")).not.toBeInTheDocument();
     expect(screen.getByText("日")).toBeInTheDocument();
   });
 

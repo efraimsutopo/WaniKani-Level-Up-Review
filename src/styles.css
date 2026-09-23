@@ -302,6 +302,26 @@ h1 {
   background: #00a1f1;
 }
 
+.subject-character-image {
+  display: block;
+  width: min(65%, 180px);
+  max-height: 180px;
+  object-fit: contain;
+}
+
+.learn-characters .subject-character-image,
+.component-card .subject-character-image,
+.not-guru-table .subject-character-image {
+  width: 48px;
+  max-width: 100%;
+  max-height: 48px;
+}
+
+.not-guru-table .subject-character-image {
+  width: 32px;
+  max-height: 32px;
+}
+
 .learn-characters.kanji {
   background: #f100a1;
 }

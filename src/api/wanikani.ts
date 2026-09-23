@@ -445,6 +445,7 @@ function buildNotGuruItems(
                   {
                     subjectId: radical.id,
                     characters: radical.data.characters,
+                    characterImages: radical.data.character_images,
                     slug: radical.data.slug,
                     srsStage: radicalAssignment?.data.srs_stage ?? 0,
                     fastestGuruAt: fastestGuruAt ? new Date(fastestGuruAt).toISOString() : null,
@@ -469,6 +470,7 @@ function buildNotGuruItems(
           subjectId: subject.id,
           subjectType: subject.object,
           characters: currentSubject.data.characters,
+          characterImages: currentSubject.data.character_images,
           slug: currentSubject.data.slug,
           srsStage: assignment?.data.srs_stage ?? 0,
           availableAt: assignment?.data.available_at ?? null,
