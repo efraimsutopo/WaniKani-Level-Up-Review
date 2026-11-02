@@ -50,15 +50,23 @@ describe("App", () => {
         });
       }
 
-      if (requestUrl.includes("/assignments?immediately_available_for_review")) {
+      if (
+        requestUrl.includes("/assignments?immediately_available_for_review")
+      ) {
         return collectionResponse([]);
       }
 
-      if (requestUrl.includes("/assignments?") && requestUrl.includes("levels=12")) {
+      if (
+        requestUrl.includes("/assignments?") &&
+        requestUrl.includes("levels=12")
+      ) {
         return collectionResponse([]);
       }
 
-      if (requestUrl.includes("/subjects?") && requestUrl.includes("levels=12")) {
+      if (
+        requestUrl.includes("/subjects?") &&
+        requestUrl.includes("levels=12")
+      ) {
         return collectionResponse([]);
       }
 
@@ -115,15 +123,23 @@ describe("App", () => {
         });
       }
 
-      if (requestUrl.includes("/assignments?immediately_available_for_review")) {
+      if (
+        requestUrl.includes("/assignments?immediately_available_for_review")
+      ) {
         return collectionResponse([]);
       }
 
-      if (requestUrl.includes("/assignments?") && requestUrl.includes("levels=12")) {
+      if (
+        requestUrl.includes("/assignments?") &&
+        requestUrl.includes("levels=12")
+      ) {
         return collectionResponse(levelAssignments);
       }
 
-      if (requestUrl.includes("/subjects?") && requestUrl.includes("levels=12")) {
+      if (
+        requestUrl.includes("/subjects?") &&
+        requestUrl.includes("levels=12")
+      ) {
         return collectionResponse(levelKanji);
       }
 
@@ -138,7 +154,7 @@ describe("App", () => {
     expect(screen.queryByText(/\b(?:AM|PM)\b/)).not.toBeInTheDocument();
   });
 
-  it("opens the learn page at the synced current level", async () => {
+  it("opens the glossary at the synced current level", async () => {
     localStorage.setItem("wanikani-review-token", "token");
     const fetcher = vi.fn(async (url: string | URL | Request) => {
       const requestUrl = String(url);
@@ -154,15 +170,23 @@ describe("App", () => {
         });
       }
 
-      if (requestUrl.includes("/assignments?immediately_available_for_review")) {
+      if (
+        requestUrl.includes("/assignments?immediately_available_for_review")
+      ) {
         return collectionResponse([]);
       }
 
-      if (requestUrl.includes("/assignments?") && requestUrl.includes("levels=12")) {
+      if (
+        requestUrl.includes("/assignments?") &&
+        requestUrl.includes("levels=12")
+      ) {
         return collectionResponse([]);
       }
 
-      if (requestUrl.includes("/subjects?") && requestUrl.includes("levels=12")) {
+      if (
+        requestUrl.includes("/subjects?") &&
+        requestUrl.includes("levels=12")
+      ) {
         return collectionResponse([
           {
             ...subject(120, "口"),
@@ -171,11 +195,13 @@ describe("App", () => {
               ...subject(120, "口").data,
               characters: null,
               slug: "elf",
-              character_images: [{
-                url: "https://example.com/elf.svg",
-                content_type: "image/svg+xml",
-                metadata: { inline_styles: true },
-              }],
+              character_images: [
+                {
+                  url: "https://example.com/elf.svg",
+                  content_type: "image/svg+xml",
+                  metadata: { inline_styles: true },
+                },
+              ],
               readings: undefined,
             },
           },
@@ -190,7 +216,7 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByText("No reviews are due right now.");
-    fireEvent.click(screen.getByRole("button", { name: /learn/i }));
+    fireEvent.click(screen.getByRole("button", { name: /glossary/i }));
 
     expect(screen.getByLabelText("Level")).toHaveValue(12);
     expect(await screen.findByText("Radicals")).toBeInTheDocument();
@@ -280,7 +306,11 @@ function subject(id: number, characters = "日") {
   };
 }
 
-function assignment(id: number, subjectId: number, overrides: Record<string, unknown> = {}) {
+function assignment(
+  id: number,
+  subjectId: number,
+  overrides: Record<string, unknown> = {},
+) {
   return {
     id,
     object: "assignment",

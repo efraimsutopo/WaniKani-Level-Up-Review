@@ -1,21 +1,27 @@
+import { SubjectCharacter, stripMarkup, type DetailSectionName } from "./components/SubjectDetails";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { FormEvent, ReactNode, RefObject } from "react";
+import type { FormEvent, ReactNode } from "react";
 import {
   CheckCircle2,
   BookOpen,
   Eye,
   EyeOff,
-  Info,
   RefreshCw,
   RotateCcw,
 } from "lucide-react";
 import { getErrorMessage, WaniKaniClient, WaniKaniError } from "./api/wanikani";
-import type { CurrentLevelProgress, Resource, ReviewItem, SubjectCharacterImage, SubjectData, SubjectType } from "./api/types";
-import { getAcceptedAnswers } from "./review/answers";
+import type {
+  CurrentLevelProgress,
+  Resource,
+  ReviewItem,
+  SubjectData,
+  SubjectType,
+} from "./api/types";
 import { playPronunciation } from "./review/audio";
-import { romajiToHiragana } from "./review/kana";
 import { getItemLevel, orderReviewItems, type SortMode } from "./review/order";
 import packageInfo from "../package.json";
+import { LessonsPage } from "./lessons/LessonsPage";
+import { QuestionCard } from "./components/QuestionCard";
 import {
   answerCurrentQuestion,
   createReviewSession,
@@ -37,32 +43,7 @@ interface SyncState {
   currentLevelProgress?: CurrentLevelProgress;
 }
 
-type DetailSectionName = "meaning" | "reading" | "composition" | "context";
-type AppView = "review" | "learn";
-
-function SubjectCharacter({
-  subjectType,
-  characters,
-  slug,
-  character_images,
-}: {
-  subjectType: SubjectType;
-  characters: string | null;
-  slug: string;
-  character_images?: SubjectCharacterImage[];
-}) {
-  const image =
-    subjectType === "radical" && !characters
-      ? character_images?.find((entry) => entry.content_type === "image/svg+xml") ??
-        character_images?.[0]
-      : null;
-
-  return image ? (
-    <img className="subject-character-image" src={image.url} alt={slug} />
-  ) : (
-    <span lang={characters ? "ja" : undefined}>{characters ?? slug}</span>
-  );
-}
+type AppView = "review" | "learn" | "lessons";
 
 interface LearnState {
   status: "idle" | "loading" | "ready" | "error";
@@ -104,7 +85,10 @@ export function App() {
   const [playAudio, setPlayAudio] = useState(true);
   const [sortMode, setSortMode] = useState<SortMode>("lower-srs-first");
   const [activeView, setActiveView] = useState<AppView>("review");
-  const [learnLevel, setLearnLevel] = useState(() => syncState.currentLevel ?? 1);
+  const [lessonsOpened, setLessonsOpened] = useState(false);
+  const [learnLevel, setLearnLevel] = useState(
+    () => syncState.currentLevel ?? 1,
+  );
   const [learnState, setLearnState] = useState<LearnState>({
     status: "idle",
     message: "",
@@ -122,7 +106,11 @@ export function App() {
     session.totalCount === 0
       ? 0
       : Math.round((session.completedCount / session.totalCount) * 100);
-  const dueBreakdown = getDueBreakdown(session, sortMode, syncState.currentLevel);
+  const dueBreakdown = getDueBreakdown(
+    session,
+    sortMode,
+    syncState.currentLevel,
+  );
 
   const client = useMemo(
     () => (token.trim() ? new WaniKaniClient(token.trim()) : null),
@@ -135,8 +123,10 @@ export function App() {
 
   useEffect(() => {
     if (!client || activeView !== "learn") return;
-    if (learnState.status === "ready" && learnState.level === learnLevel) return;
-    if (learnState.status === "loading" && learnState.level === learnLevel) return;
+    if (learnState.status === "ready" && learnState.level === learnLevel)
+      return;
+    if (learnState.status === "loading" && learnState.level === learnLevel)
+      return;
 
     void loadLevelSubjects(learnLevel);
   }, [activeView, client, learnLevel, learnState.level, learnState.status]);
@@ -307,7 +297,10 @@ export function App() {
       const subjects = await client.getLevelSubjects(level);
       setLearnState({
         status: "ready",
-        message: subjects.length === 0 ? `No radical or kanji items found for level ${level}.` : "",
+        message:
+          subjects.length === 0
+            ? `No radical or kanji items found for level ${level}.`
+            : "",
         level,
         subjects,
       });
@@ -418,6 +411,16 @@ export function App() {
         <nav className="view-tabs" aria-label="app views">
           <button
             type="button"
+            className={activeView === "lessons" ? "active" : undefined}
+            onClick={() => {
+              setLessonsOpened(true);
+              setActiveView("lessons");
+            }}
+          >
+            <BookOpen size={18} /> Lessons
+          </button>
+          <button
+            type="button"
             className={activeView === "review" ? "active" : undefined}
             onClick={() => setActiveView("review")}
           >
@@ -430,7 +433,7 @@ export function App() {
             onClick={() => setActiveView("learn")}
           >
             <BookOpen size={18} />
-            Learn
+            Glossary
           </button>
         </nav>
 
@@ -486,16 +489,19 @@ export function App() {
                   >
                     <RefreshCw size={38} className="spin" />
                     <h2>Syncing reviews</h2>
-                    <p>Fetching due assignments and reusing cached item data.</p>
+                    <p>
+                      Fetching due assignments and reusing cached item data.
+                    </p>
                   </div>
                 ) : currentQuestion ? (
-                  <ReviewCard
+                  <QuestionCard
                     item={currentQuestion.item}
                     kind={currentQuestion.kind}
                     answer={answer}
                     feedback={feedback}
                     submitting={
-                      submittingAssignmentId === currentQuestion.item.assignment.id
+                      submittingAssignmentId ===
+                      currentQuestion.item.assignment.id
                     }
                     answerInputRef={answerInputRef}
                     showDetails={showDetails}
@@ -539,7 +545,9 @@ export function App() {
                 >
                   <RefreshCw
                     size={18}
-                    className={syncState.status === "loading" ? "spin" : undefined}
+                    className={
+                      syncState.status === "loading" ? "spin" : undefined
+                    }
                   />
                   {syncState.status === "loading" ? "Syncing" : "Sync"}
                 </button>
@@ -580,265 +588,47 @@ export function App() {
               </aside>
             </div>
           </>
-        ) : (
+        ) : activeView === "learn" ? (
           <LearnPage
             level={learnLevel}
             learnState={learnState}
             onLevelChange={(level) => setLearnLevel(level)}
             onReload={() => void loadLevelSubjects(learnLevel)}
           />
-        )}
+        ) : null}
+        <div hidden={activeView !== "lessons"}>
+          {client && lessonsOpened && (
+            <LessonsPage
+              key={token.trim()}
+              client={client}
+              username={syncState.username}
+              currentLevel={syncState.currentLevel}
+              onChangeToken={changeToken}
+              playAudio={playAudio}
+              onPlayAudioChange={setPlayAudio}
+              onCompleted={() => {
+                if (syncState.currentLevel) {
+                  void client
+                    .getCurrentLevelProgress(syncState.currentLevel)
+                    .then((currentLevelProgress) => {
+                      setSyncState((state) => ({
+                        ...state,
+                        currentLevelProgress,
+                      }));
+                    })
+                    .catch(() => {
+                      /* The next review sync will refresh progress. */
+                    });
+                }
+              }}
+            />
+          )}
+        </div>
       </section>
     </main>
   );
 }
 
-function ReviewCard({
-  item,
-  kind,
-  answer,
-  feedback,
-  submitting,
-  answerInputRef,
-  showDetails,
-  openDetailSections,
-  onToggleDetails,
-  onToggleDetailSection,
-  onAnswerChange,
-  onSubmit,
-}: {
-  item: ReviewItem;
-  kind: "meaning" | "reading";
-  answer: string;
-  feedback: AnswerResult | null;
-  submitting: boolean;
-  answerInputRef: RefObject<HTMLInputElement | null>;
-  showDetails: boolean;
-  openDetailSections: Record<DetailSectionName, boolean>;
-  onToggleDetails: () => void;
-  onToggleDetailSection: (section: DetailSectionName) => void;
-  onAnswerChange: (answer: string) => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-}) {
-  const acceptedAnswers = getAcceptedAnswers(item, kind);
-  const meaningAnswers = getAcceptedAnswers(item, "meaning");
-  const primaryMeanings = item.subject.data.meanings
-    .filter((meaning) => meaning.primary && meaning.accepted_answer)
-    .map((meaning) => meaning.meaning);
-  const alternativeMeanings = item.subject.data.meanings
-    .filter((meaning) => !meaning.primary && meaning.accepted_answer)
-    .map((meaning) => meaning.meaning);
-  const readingAnswers = getAcceptedAnswers(item, "reading");
-  const readingGroups = getReadingGroups(item);
-  const pairedReadings = getPairedReadings(readingGroups);
-  const level = getItemLevel(item);
-  const srsLabel = getSrsLabel(item.assignment.data.srs_stage);
-  const srsGroup = getSrsGroup(item.assignment.data.srs_stage);
-  const inputHint = kind === "meaning" ? "romaji" : "auto hiragana";
-  const [readingMeaningOpen, setReadingMeaningOpen] = useState(false);
-  const meaningOpen = kind === "meaning" ? openDetailSections.meaning : readingMeaningOpen;
-
-  useEffect(() => {
-    if (kind === "reading") setReadingMeaningOpen(false);
-  }, [item.assignment.id, kind]);
-
-  return (
-    <article
-      className={`review-card ${feedback ? (feedback.correct ? "answer-correct" : "answer-incorrect") : ""}`}
-    >
-      <div className="review-main">
-        <div className="item-meta">
-          <span className={`type-badge ${item.subject.object}`}>
-            {item.subject.object.replace("_", " ")}
-          </span>
-          <span>Level {Number.isFinite(level) ? level : "-"}</span>
-          <span
-            className={`srs-badge ${srsGroup}`}
-            title={`SRS stage ${item.assignment.data.srs_stage}`}
-          >
-            {srsLabel}
-          </span>
-        </div>
-
-        <div className={`characters ${item.subject.object}`}>
-          <SubjectCharacter subjectType={item.subject.object} {...item.subject.data} />
-        </div>
-
-        <form onSubmit={onSubmit} className="answer-form" autoComplete="off">
-          <label htmlFor="answer-input">
-            {kind} <span>{inputHint}</span>
-          </label>
-          <input
-            id="answer-input"
-            ref={answerInputRef}
-            name="wanikani-review-answer"
-            value={answer}
-            onChange={(event) =>
-              onAnswerChange(
-                kind === "reading"
-                  ? romajiToHiragana(event.target.value, {
-                      preserveTrailingN: true,
-                    })
-                  : event.target.value,
-              )
-            }
-            placeholder={
-              kind === "meaning"
-                ? "Enter meaning in romaji"
-                : "Enter reading in hiragana"
-            }
-            lang={kind === "reading" ? "ja" : "en"}
-            inputMode="text"
-            disabled={submitting}
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="none"
-            spellCheck={false}
-            autoFocus
-          />
-          <button
-            type="submit"
-            className="primary-button"
-            disabled={submitting || !answer.trim()}
-          >
-            <RotateCcw size={18} />
-            {submitting ? "Submitting" : "Answer"}
-          </button>
-        </form>
-
-        {feedback && !feedback.correct && (
-          <InlineFeedback feedback={feedback} />
-        )}
-      </div>
-
-      <div className="details-header">
-        <button type="button" onClick={onToggleDetails}>
-          <Info size={18} />
-          {showDetails ? "Hide details" : "Show details"}
-        </button>
-      </div>
-
-      {showDetails && (
-        <section className="item-details" aria-label="item details">
-          <DetailSection
-            title="Meaning"
-            active={kind === "meaning"}
-            open={meaningOpen}
-            onToggle={() => {
-              if (kind === "meaning") {
-                onToggleDetailSection("meaning");
-              } else {
-                setReadingMeaningOpen((open) => !open);
-              }
-            }}
-          >
-            <WordList
-              label="Primary"
-              values={primaryMeanings.length ? primaryMeanings : meaningAnswers}
-            />
-            {alternativeMeanings.length > 0 && (
-              <WordList label="Alternative" values={alternativeMeanings} />
-            )}
-            {item.studyMaterial?.data.meaning_synonyms.length ? (
-              <WordList
-                label="User synonyms"
-                values={item.studyMaterial.data.meaning_synonyms}
-              />
-            ) : null}
-            {item.subject.data.parts_of_speech?.length ? (
-              <TextBlock
-                label="Word type"
-                value={item.subject.data.parts_of_speech.join(", ")}
-              />
-            ) : null}
-            {item.subject.data.meaning_mnemonic ? (
-              <TextBlock
-                label="Explanation"
-                value={stripMarkup(item.subject.data.meaning_mnemonic)}
-              />
-            ) : null}
-            {item.subject.data.meaning_hint ? (
-              <TextBlock
-                label="Hint"
-                value={stripMarkup(item.subject.data.meaning_hint)}
-              />
-            ) : null}
-          </DetailSection>
-
-          <DetailSection
-            title="Reading"
-            active={kind === "reading"}
-            open={openDetailSections.reading}
-            onToggle={() => onToggleDetailSection("reading")}
-          >
-            {pairedReadings ? (
-              <ReadingPair
-                left={pairedReadings.left}
-                right={pairedReadings.right}
-                active={kind === "reading"}
-              />
-            ) : null}
-            {readingGroups
-              .filter(
-                (group) =>
-                  group.label !== "Onyomi" && group.label !== "Kunyomi",
-              )
-              .map((group) => (
-                <Detail
-                  key={group.label}
-                  label={group.label}
-                  value={group.value}
-                  lang="ja"
-                  accepted={kind === "reading" && group.accepted}
-                />
-              ))}
-            {!pairedReadings &&
-              readingGroups.length === 0 &&
-              readingAnswers.length > 0 && (
-                <Detail
-                  label="Reading"
-                  value={readingAnswers.join(", ")}
-                  lang="ja"
-                  accepted={kind === "reading"}
-                />
-              )}
-            {item.subject.data.reading_mnemonic ? (
-              <TextBlock
-                label="Explanation"
-                value={stripMarkup(item.subject.data.reading_mnemonic)}
-              />
-            ) : null}
-            {item.subject.data.reading_hint ? (
-              <TextBlock
-                label="Hint"
-                value={stripMarkup(item.subject.data.reading_hint)}
-              />
-            ) : null}
-          </DetailSection>
-
-          {item.components?.length ? (
-            <ComponentCards
-              label={item.subject.object === "kanji" ? "Radicals" : "Kanji"}
-              components={item.components}
-              open={openDetailSections.composition}
-              onToggle={() => onToggleDetailSection("composition")}
-            />
-          ) : null}
-          {item.subject.data.context_sentences?.length ? (
-            <ContextSentences
-              sentences={item.subject.data.context_sentences}
-              open={openDetailSections.context}
-              onToggle={() => onToggleDetailSection("context")}
-            />
-          ) : null}
-        </section>
-      )}
-      <p className="sr-only">
-        Accepted answers include {acceptedAnswers.join(", ")}.
-      </p>
-    </article>
-  );
-}
 
 function LearnPage({
   level,
@@ -851,8 +641,12 @@ function LearnPage({
   onLevelChange: (level: number) => void;
   onReload: () => void;
 }) {
-  const radicals = learnState.subjects.filter((subject) => subject.object === "radical");
-  const kanji = learnState.subjects.filter((subject) => subject.object === "kanji");
+  const radicals = learnState.subjects.filter(
+    (subject) => subject.object === "radical",
+  );
+  const kanji = learnState.subjects.filter(
+    (subject) => subject.object === "kanji",
+  );
 
   return (
     <div className="learn-page">
@@ -866,7 +660,11 @@ function LearnPage({
           value={level}
           onChange={(event) => {
             const nextLevel = Number(event.target.value);
-            if (Number.isInteger(nextLevel) && nextLevel >= 1 && nextLevel <= 60) {
+            if (
+              Number.isInteger(nextLevel) &&
+              nextLevel >= 1 &&
+              nextLevel <= 60
+            ) {
               onLevelChange(nextLevel);
             }
           }}
@@ -886,20 +684,31 @@ function LearnPage({
       </div>
 
       {learnState.message && (
-        <div className="status-strip learn-status" data-status={learnState.status}>
+        <div
+          className="status-strip learn-status"
+          data-status={learnState.status}
+        >
           <span>{learnState.message}</span>
         </div>
       )}
 
       {learnState.status === "loading" ? (
-        <div className="empty-state loading-state" role="status" aria-live="polite">
+        <div
+          className="empty-state loading-state"
+          role="status"
+          aria-live="polite"
+        >
           <RefreshCw size={38} className="spin" />
           <h2>Loading level {level}</h2>
           <p>Fetching radicals and kanji.</p>
         </div>
       ) : (
         <div className="learn-content">
-          <LearnGroup title="Radicals" count={radicals.length} subjects={radicals} />
+          <LearnGroup
+            title="Radicals"
+            count={radicals.length}
+            subjects={radicals}
+          />
           <LearnGroup title="Kanji" count={kanji.length} subjects={kanji} />
         </div>
       )}
@@ -945,9 +754,10 @@ function LearnSubjectCard({
   const meanings = subject.data.meanings
     .filter((meaning) => meaning.accepted_answer)
     .map((meaning) => meaning.meaning);
-  const primaryReadings = subject.data.readings
-    ?.filter((reading) => reading.accepted_answer)
-    .map((reading) => reading.reading) ?? [];
+  const primaryReadings =
+    subject.data.readings
+      ?.filter((reading) => reading.accepted_answer)
+      .map((reading) => reading.reading) ?? [];
   const mnemonic =
     subject.object === "kanji"
       ? subject.data.reading_mnemonic || subject.data.meaning_mnemonic
@@ -975,275 +785,12 @@ function LearnSubjectCard({
   );
 }
 
-function getReadingGroups(
-  item: ReviewItem,
-): Array<{ label: string; value: string; accepted: boolean }> {
-  const readings = item.subject.data.readings ?? [];
-  const groups = [
-    { label: "Onyomi", type: "onyomi" },
-    { label: "Kunyomi", type: "kunyomi" },
-    { label: "Nanori", type: "nanori" },
-  ];
 
-  return groups.flatMap((group) => {
-    const groupReadings = readings.filter(
-      (reading) => reading.type === group.type,
-    );
-    const values = groupReadings.map((reading) =>
-      reading.accepted_answer ? reading.reading : `${reading.reading}*`,
-    );
-    const accepted = groupReadings.some((reading) => reading.accepted_answer);
 
-    return values.length > 0
-      ? [{ label: group.label, value: values.join(", "), accepted }]
-      : [];
-  });
-}
 
-function Detail({
-  label,
-  value,
-  lang,
-  accepted = false,
-}: {
-  label: string;
-  value: string;
-  lang?: string;
-  accepted?: boolean;
-}) {
-  return (
-    <div className={accepted ? "detail-row accepted-detail" : "detail-row"}>
-      <span>{label}</span>
-      <strong lang={lang}>{value}</strong>
-    </div>
-  );
-}
 
-function DetailSection({
-  title,
-  active,
-  open,
-  onToggle,
-  children,
-}: {
-  title: string;
-  active?: boolean;
-  open: boolean;
-  onToggle: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <section className={active ? "wk-section active-section" : "wk-section"}>
-      <button type="button" className="wk-section-toggle" onClick={onToggle}>
-        <span>{title}</span>
-        <strong>{open ? "Hide" : "Show"}</strong>
-      </button>
-      {open && <div className="wk-section-body">{children}</div>}
-    </section>
-  );
-}
 
-function WordList({ label, values }: { label: string; values: string[] }) {
-  if (values.length === 0) return null;
 
-  return (
-    <div className="wk-subsection">
-      <h3>{label}</h3>
-      <ul>
-        {values.map((value) => (
-          <li key={value}>{value}</li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function TextBlock({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="wk-subsection">
-      <h3>{label}</h3>
-      <p>{value}</p>
-    </div>
-  );
-}
-
-function ComponentCards({
-  label,
-  components,
-  open,
-  onToggle,
-}: {
-  label: string;
-  components: NonNullable<ReviewItem["components"]>;
-  open: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <section className="wk-section component-detail">
-      <button type="button" className="wk-section-toggle" onClick={onToggle}>
-        <span>{label}</span>
-        <strong>{open ? "Hide" : "Show"}</strong>
-      </button>
-      {open && (
-        <div className="wk-section-body">
-          <div className="component-grid">
-            {components.map((component) => {
-              const name =
-                getAcceptedAnswers(
-                  {
-                    assignment: {
-                      id: component.id,
-                      object: "assignment",
-                      url: "",
-                      data_updated_at: "",
-                      data: {
-                        subject_id: component.id,
-                        subject_type: component.object,
-                        level: component.data.level,
-                        srs_stage: 0,
-                        passed_at: null,
-                        available_at: null,
-                        passed: false,
-                        hidden: false,
-                      },
-                    },
-                    subject: component,
-                  },
-                  "meaning",
-                )[0] ?? component.data.slug;
-              const readings = getAcceptedAnswers(
-                {
-                  assignment: {
-                    id: component.id,
-                    object: "assignment",
-                    url: "",
-                    data_updated_at: "",
-                    data: {
-                      subject_id: component.id,
-                      subject_type: component.object,
-                      level: component.data.level,
-                      srs_stage: 0,
-                      passed_at: null,
-                      available_at: null,
-                      passed: false,
-                      hidden: false,
-                    },
-                  },
-                  subject: component,
-                },
-                "reading",
-              );
-
-              return (
-                <div
-                  key={component.id}
-                  className={`component-card ${component.object}`}
-                >
-                  <strong>
-                    <SubjectCharacter subjectType={component.object} {...component.data} />
-                  </strong>
-                  <small>{name}</small>
-                  {readings.length > 0 && (
-                    <small lang="ja">{readings.slice(0, 2).join(", ")}</small>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function ContextSentences({
-  sentences,
-  open,
-  onToggle,
-}: {
-  sentences: NonNullable<ReviewItem["subject"]["data"]["context_sentences"]>;
-  open: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <section className="wk-section context-detail">
-      <button type="button" className="wk-section-toggle" onClick={onToggle}>
-        <span>Context</span>
-        <strong>{open ? "Hide" : "Show"}</strong>
-      </button>
-      {open && (
-        <div className="wk-section-body">
-          <div className="context-list">
-            {sentences.map((sentence) => (
-              <div
-                key={`${sentence.ja}-${sentence.en}`}
-                className="context-sentence"
-              >
-                <strong lang="ja">{sentence.ja}</strong>
-                <small>{sentence.en}</small>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function InlineFeedback({ feedback }: { feedback: AnswerResult }) {
-  return (
-    <div className="feedback incorrect" role="status">
-      <span>Accepted: {feedback.acceptedAnswers.join(", ")}</span>
-    </div>
-  );
-}
-
-function stripMarkup(value: string): string {
-  return value.replace(/<[^>]+>/g, "");
-}
-
-function ReadingPair({
-  left,
-  right,
-  active,
-}: {
-  left?: { label: string; value: string; accepted: boolean };
-  right?: { label: string; value: string; accepted: boolean };
-  active: boolean;
-}) {
-  return (
-    <div className="reading-pair">
-      {left ? (
-        <Detail
-          label={left.label}
-          value={left.value}
-          lang="ja"
-          accepted={active && left.accepted}
-        />
-      ) : (
-        <div />
-      )}
-      {right ? (
-        <Detail
-          label={right.label}
-          value={right.value}
-          lang="ja"
-          accepted={active && right.accepted}
-        />
-      ) : (
-        <div />
-      )}
-    </div>
-  );
-}
-
-function getPairedReadings(
-  readingGroups: Array<{ label: string; value: string; accepted: boolean }>,
-) {
-  const left = readingGroups.find((group) => group.label === "Onyomi");
-  const right = readingGroups.find((group) => group.label === "Kunyomi");
-  return left || right ? { left, right } : null;
-}
 
 function DueBreakdown({
   rows,
@@ -1318,7 +865,10 @@ function CurrentLevelProgressMetrics({
         label="Level-up kanji"
         value={`${kanjiPassedTowardLevelUp}/${progress.kanjiRequiredForLevelUp}`}
       />
-      <Metric label="Need kanji" value={progress.kanjiRemainingForLevelUp.toString()} />
+      <Metric
+        label="Need kanji"
+        value={progress.kanjiRemainingForLevelUp.toString()}
+      />
       <Metric
         label="Fastest next level"
         value={formatReviewTime(progress.fastestLevelUpAt)}
@@ -1356,7 +906,10 @@ function NotGuruTable({
 }) {
   return (
     <div className="not-guru-table-wrap">
-      <table className="not-guru-table" aria-label="current level radical and kanji not Guru">
+      <table
+        className="not-guru-table"
+        aria-label="current level radical and kanji not Guru"
+      >
         <thead>
           <tr>
             <th>Item</th>
@@ -1393,7 +946,9 @@ function NotGuruTable({
   );
 }
 
-function formatItemNextReview(item: CurrentLevelProgress["notGuruItems"][number]): string {
+function formatItemNextReview(
+  item: CurrentLevelProgress["notGuruItems"][number],
+): string {
   if (item.availableAt) return formatReviewTime(item.availableAt);
   if (item.blockedByRadicals.length === 0) return "Lesson";
 

@@ -84,7 +84,7 @@ export interface UserData {
 export interface AssignmentData {
   subject_id: number;
   subject_type: SubjectType;
-  level: number;
+  level?: number;
   srs_stage: number;
   passed_at: string | null;
   available_at: string | null;

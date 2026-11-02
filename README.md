@@ -22,6 +22,14 @@ npm run dev
 
 Open the Vite URL, paste a WaniKani v2 API token with review permissions, and click **Sync**.
 
+## Kanji lessons
+
+Open **Lessons** to study kanji currently unlocked for your account. Read the meanings, readings, and mnemonics, then answer the meaning and reading quiz. Click **Complete lesson & save to WaniKani** to start the assignment and its review schedule. Your API token needs **assignments:start** permission in WaniKani's token settings.
+
+Only available lessons within your account's level and subscription are shown. Failed saves keep the completed quiz available for retry; retries check whether WaniKani already started the assignment before sending another request. Switching tabs preserves the current quiz. The **Learn** tab remains a level reference browser.
+
+Lesson completion uses [`PUT /assignments/:id/start`](https://docs.api.wanikani.com/20170710/#start-an-assignment). Lesson quizzes do not submit reviews or count toward Guru immediately.
+
 ## Scripts
 
 ```sh

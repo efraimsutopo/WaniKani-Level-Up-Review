@@ -4,6 +4,7 @@ import type {
   CurrentLevelProgress,
   CurrentLevelProgressItem,
   Resource,
+  ReviewItem,
   ReviewCreatePayload,
   ReviewCreateResponse,
   SummaryReport,
@@ -69,6 +70,51 @@ export class WaniKaniClient {
 
   async getSummary(): Promise<SummaryReport> {
     return this.request<SummaryReport>("/summary");
+  }
+
+  async loadAvailableLessons(): Promise<ReviewItem[]> {
+    const user = await this.getUser();
+    const assignments = await this.requestCollection<Resource<AssignmentData, "assignment">>(
+      "/assignments?immediately_available_for_lessons&subject_types=radical,kanji,vocabulary,kana_vocabulary",
+    );
+    const eligible = assignments.filter(({ data }) =>
+      !data.hidden &&
+      (data.subject_type === "radical" || data.subject_type === "kanji" ||
+        data.subject_type === "vocabulary" || data.subject_type === "kana_vocabulary") &&
+      data.srs_stage === 0,
+    );
+    const subjects = await this.getCachedSubjects(eligible.map(({ data }) => data.subject_id));
+    const componentIds = [...new Set(subjects.flatMap((subject) => subject.data.component_subject_ids ?? []))];
+    const components = await this.getCachedSubjects(componentIds);
+    const componentById = new Map(components.map((subject) => [subject.id, subject]));
+    const byId = new Map(subjects.map((subject) => [subject.id, subject]));
+    const maximumAccessibleLevel = Math.min(user.data.level, user.data.subscription.max_level_granted);
+    const subjectRank = (subjectType: string) =>
+      subjectType === "radical" ? 0 : subjectType === "kanji" ? 1 :
+        subjectType === "vocabulary" ? 2 : 3;
+    return eligible.flatMap((assignment) => {
+      const subject = byId.get(assignment.data.subject_id);
+      return subject && subject.data.level <= maximumAccessibleLevel
+        ? [{ assignment, subject, components: (subject.data.component_subject_ids ?? []).flatMap((id) => {
+          const component = componentById.get(id);
+          return component ? [component] : [];
+        }) }]
+        : [];
+    }).sort((a, b) =>
+      subjectRank(a.subject.object) - subjectRank(b.subject.object) ||
+      a.subject.data.level - b.subject.data.level || a.subject.id - b.subject.id,
+    );
+  }
+
+  async startAssignment(id: number): Promise<Resource<AssignmentData, "assignment">> {
+    // Reconcile first: a previous attempt may have succeeded despite a lost response.
+    const current = await this.request<Resource<AssignmentData, "assignment">>(`/assignments/${id}`);
+    if (current.data.srs_stage > 0) return current;
+    return this.request<Resource<AssignmentData, "assignment">>(`/assignments/${id}/start`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({ assignment: {} }),
+    });
   }
 
   async getDueAssignments(): Promise<Array<Resource<AssignmentData, "assignment">>> {
