@@ -85,7 +85,11 @@ export function createReviewSession(items: ReviewItem[]): ReviewSessionState {
   };
 }
 
-export function answerCurrentQuestion(state: ReviewSessionState, input: string): [ReviewSessionState, AnswerResult] {
+export function answerCurrentQuestion(
+  state: ReviewSessionState,
+  input: string,
+  sendMistakes = false,
+): [ReviewSessionState, AnswerResult] {
   const [question, ...remainingQueue] = state.queue;
   if (!question) {
     return [
@@ -140,8 +144,8 @@ export function answerCurrentQuestion(state: ReviewSessionState, input: string):
         item: question.item,
         payload: {
           assignment_id: question.item.assignment.id,
-          incorrect_meaning_answers: 0,
-          incorrect_reading_answers: 0,
+          incorrect_meaning_answers: sendMistakes ? updatedProgress.incorrectMeaningAnswers : 0,
+          incorrect_reading_answers: sendMistakes ? updatedProgress.incorrectReadingAnswers : 0,
         },
       }
     : undefined;

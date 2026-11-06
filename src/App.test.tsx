@@ -74,7 +74,7 @@ describe("App", () => {
     });
     vi.stubGlobal("fetch", fetcher);
 
-    render(<App />);
+    const view = render(<App />);
 
     await screen.findByText("No reviews are due right now.");
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -83,6 +83,21 @@ describe("App", () => {
       "https://api.wanikani.com/v2/assignments?immediately_available_for_review",
       expect.any(Object),
     );
+
+    const sendMistakes = screen.getByRole("checkbox", { name: "Send mistakes to WaniKani" });
+    expect(sendMistakes).not.toBeChecked();
+    fireEvent.click(sendMistakes);
+    expect(sendMistakes).toBeChecked();
+    expect(localStorage.getItem("wanikani-review-send-mistakes")).toBe("true");
+
+    view.unmount();
+    render(<App />);
+    await screen.findByText("No reviews are due right now.");
+    const savedSetting = screen.getByRole("checkbox", { name: "Send mistakes to WaniKani" });
+    expect(savedSetting).toBeChecked();
+    fireEvent.click(savedSetting);
+    expect(savedSetting).not.toBeChecked();
+    expect(localStorage.getItem("wanikani-review-send-mistakes")).toBe("false");
   });
 
   it("shows all current-level progress times in 24-hour format", async () => {

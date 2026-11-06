@@ -9,7 +9,7 @@ A local React app for doing WaniKani reviews in an order that favors faster leve
    - Lower level first
 4. Inside every group: radicals, then kanji, then vocabulary
 
-Reviews are only submitted to WaniKani after every required part for an item has been answered correctly. Incorrect answers show accepted answers and put that question back into the queue, but only the final corrected review is sent.
+Reviews are only submitted to WaniKani after every required part for an item has been answered correctly. Incorrect answers show accepted answers and put that question back into the queue. Enable **Send mistakes to WaniKani** in the right-side review settings to include meaning and reading mistake counts in the completed review. This setting is off by default and your choice is saved in this browser. The setting at submission time applies to all mistakes recorded for that item.
 
 ## Setup
 

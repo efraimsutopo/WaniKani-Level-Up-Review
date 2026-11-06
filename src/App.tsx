@@ -33,6 +33,7 @@ import {
 } from "./review/session";
 
 const TOKEN_STORAGE_KEY = "wanikani-review-token";
+const SEND_MISTAKES_STORAGE_KEY = "wanikani-review-send-mistakes";
 const APP_VERSION = packageInfo.version;
 
 interface SyncState {
@@ -83,6 +84,9 @@ export function App() {
   const [showSessionInfo, setShowSessionInfo] = useState(true);
   const [showDueTable, setShowDueTable] = useState(true);
   const [playAudio, setPlayAudio] = useState(true);
+  const [sendMistakes, setSendMistakes] = useState(
+    () => localStorage.getItem(SEND_MISTAKES_STORAGE_KEY) === "true",
+  );
   const [sortMode, setSortMode] = useState<SortMode>("lower-srs-first");
   const [activeView, setActiveView] = useState<AppView>("review");
   const [lessonsOpened, setLessonsOpened] = useState(false);
@@ -227,7 +231,7 @@ export function App() {
     event.preventDefault();
     if (!currentQuestion || !answer.trim()) return;
 
-    const [nextSession, result] = answerCurrentQuestion(session, answer);
+    const [nextSession, result] = answerCurrentQuestion(session, answer, sendMistakes);
     if (playAudio && result.correct && currentQuestion.kind === "reading") {
       void playPronunciation(currentQuestion.item);
     }
@@ -561,6 +565,17 @@ export function App() {
                     onChange={(event) => setPlayAudio(event.target.checked)}
                   />
                   Play audio
+                </label>
+                <label className="toggle-row">
+                  <input
+                    type="checkbox"
+                    checked={sendMistakes}
+                    onChange={(event) => {
+                      setSendMistakes(event.target.checked);
+                      localStorage.setItem(SEND_MISTAKES_STORAGE_KEY, String(event.target.checked));
+                    }}
+                  />
+                  Send mistakes to WaniKani
                 </label>
                 <div className="sort-card" aria-label="sort mode">
                   <span>Sort remaining</span>

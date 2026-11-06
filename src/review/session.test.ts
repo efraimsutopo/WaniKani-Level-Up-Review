@@ -21,7 +21,7 @@ describe("review session", () => {
     expect(getSrsGroup(9)).toBe("burned");
   });
 
-  it("retries incorrect answers immediately and submits only corrected reviews", () => {
+  it.each([false, true])("retries mistakes and includes their counts only when enabled (%s)", (sendMistakes) => {
     let session = createReviewSession([item()]);
 
     let result;
@@ -33,12 +33,18 @@ describe("review session", () => {
     expect(result.correct).toBe(true);
     expect(result.submitReadyReview).toBeUndefined();
 
-    [session, result] = answerCurrentQuestion(session, "にち");
+    [session, result] = answerCurrentQuestion(session, "げつ", sendMistakes);
+    expect(result.correct).toBe(false);
+    expect(result.submitReadyReview).toBeUndefined();
+    [session, result] = answerCurrentQuestion(session, "つき", sendMistakes);
+    expect(result.correct).toBe(false);
+
+    [session, result] = answerCurrentQuestion(session, "にち", sendMistakes);
     expect(result.correct).toBe(true);
     expect(result.submitReadyReview?.payload).toMatchObject({
       assignment_id: 10,
-      incorrect_meaning_answers: 0,
-      incorrect_reading_answers: 0,
+      incorrect_meaning_answers: sendMistakes ? 1 : 0,
+      incorrect_reading_answers: sendMistakes ? 2 : 0,
     });
     expect(session.completedCount).toBe(1);
     expect(session.queue).toHaveLength(0);
