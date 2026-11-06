@@ -40,6 +40,8 @@ npm run build
 npm test
 ```
 
+Run `npm run deploy` from `main` to commit all local changes that Git tracks or does not ignore, bump the patch version in a separate commit, and build the app. The script pushes `main` to `origin`, then publishes `dist/` to `origin/gh-pages`. If the build or a push fails after the release commit, fix the error and run `npm run deploy -- --resume` from that clean release commit to retry the same version.
+
 ## Notes
 
 - The API token is stored in browser `localStorage`.
