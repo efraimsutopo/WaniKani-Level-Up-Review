@@ -22,6 +22,8 @@ npm run dev
 
 Open the Vite URL, paste a WaniKani v2 API token with review permissions, and click **Sync**.
 
+If the app looks out of date, click the version badge beside the title to check for updates. If a different version is available, finish your current session before choosing **Reload to update**.
+
 ## Kanji lessons
 
 Open **Lessons** to study kanji currently unlocked for your account. Read the meanings, readings, and mnemonics, then answer the meaning and reading quiz. Click **Complete lesson & save to WaniKani** to start the assignment and its review schedule. Your API token needs **assignments:start** permission in WaniKani's token settings.

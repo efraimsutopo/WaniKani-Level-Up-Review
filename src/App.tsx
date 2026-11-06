@@ -19,8 +19,8 @@ import type {
 } from "./api/types";
 import { playPronunciation } from "./review/audio";
 import { getItemLevel, orderReviewItems, type SortMode } from "./review/order";
-import packageInfo from "../package.json";
 import { LessonsPage } from "./lessons/LessonsPage";
+import { AppHeading } from "./components/AppHeading";
 import { QuestionCard } from "./components/QuestionCard";
 import {
   answerCurrentQuestion,
@@ -34,7 +34,6 @@ import {
 
 const TOKEN_STORAGE_KEY = "wanikani-review-token";
 const SEND_MISTAKES_STORAGE_KEY = "wanikani-review-send-mistakes";
-const APP_VERSION = packageInfo.version;
 
 interface SyncState {
   status: "idle" | "loading" | "ready" | "error";
@@ -333,13 +332,7 @@ export function App() {
     return (
       <main className="app-shell login-shell">
         <section className="login-panel" aria-label="WaniKani API token setup">
-          <div>
-            <p className="eyebrow">Level-up review</p>
-            <div className="title-row">
-              <h1>WaniKani Queue</h1>
-              <span className="version-badge">v{APP_VERSION}</span>
-            </div>
-          </div>
+          <AppHeading />
 
           <form
             className="login-form"
@@ -398,13 +391,7 @@ export function App() {
     <main className="app-shell">
       <section className="review-panel" aria-label="WaniKani review app">
         <header className="topbar">
-          <div>
-            <p className="eyebrow">Level-up review</p>
-            <div className="title-row">
-              <h1>WaniKani Queue</h1>
-              <span className="version-badge">v{APP_VERSION}</span>
-            </div>
-          </div>
+          <AppHeading warnBeforeReload />
           {syncState.message && (
             <div className="status-strip" data-status={syncState.status}>
               <span>{syncState.message}</span>

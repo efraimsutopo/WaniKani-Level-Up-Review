@@ -120,19 +120,30 @@ h1 {
 .title-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
   align-items: baseline;
+  gap: 8px 10px;
 }
 
-.version-badge {
+.version-button {
+  min-height: 32px;
   border: 1px solid #d0d7ce;
-  border-radius: 8px;
-  background: #ffffff;
   padding: 4px 8px;
+  gap: 5px;
   color: #56615a;
   font-size: 0.78rem;
   font-weight: 800;
   line-height: 1;
+}
+
+.app-update-status a {
+  color: #245949;
+  font-weight: 700;
+}
+
+.app-update-status:not(:empty) {
+  margin-top: 6px;
+  color: #3e4a43;
+  font-size: 0.875rem;
 }
 
 .status-strip {
