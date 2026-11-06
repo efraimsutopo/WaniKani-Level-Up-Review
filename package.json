@@ -1,7 +1,7 @@
 {
   "name": "wanikani-level-up-review",
   "private": true,
-  "version": "0.1.6",
+  "version": "0.1.7",
   "type": "module",
   "homepage": "https://efraimsutopo.github.io/WaniKani-Level-Up-Review",
   "scripts": {
